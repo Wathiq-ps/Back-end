@@ -61,6 +61,13 @@ return [
             // ],
         ],
 
+        // Transactional HTTP API (POST /v3/smtp/email), not the campaign
+        // endpoint — OTP is per-recipient and must not go through a list.
+        // Transport registered in AppServiceProvider via the Symfony bridge.
+        'brevo' => [
+            'transport' => 'brevo',
+        ],
+
         'resend' => [
             'transport' => 'resend',
         ],

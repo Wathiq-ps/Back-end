@@ -11,9 +11,12 @@
     "require": {
         "php": "^8.4",
         "firebase/php-jwt": "^7.1",
+        "getbrevo/brevo-php": "*",
         "laravel/framework": "^13.8",
         "laravel/sanctum": "^4.0",
-        "laravel/tinker": "^3.0"
+        "laravel/tinker": "^3.0",
+        "symfony/brevo-mailer": "^8.1",
+        "symfony/http-client": "^8.1"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
