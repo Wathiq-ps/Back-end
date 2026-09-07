@@ -21,7 +21,7 @@ Route::get('/user', [AuthController::class, 'me'])->middleware('auth.jwt');
 // UC-040 KYC: the authenticated user submits their own documents.
 Route::prefix('v1/kyc')->middleware('auth.jwt')->group(function () {
     Route::post('documents', [KycIdentityDocumentController::class, 'store']);
-    Route::get('status', [KycIdentityDocumentController::class, 'status']); //this is for test
+    Route::get('status', [KycIdentityDocumentController::class, 'status']); // this is for test
 });
 
 // FR-3.x: an owner submits a listing, which starts under review.

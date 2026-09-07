@@ -89,7 +89,12 @@ class OtpService
             'request_ip' => $ip,
         ]);
 
-        Mail::to($email)->send(new OtpCodeMail($code, (int) config('otp.ttl_minutes')));
+        // Queued, not sent inline. A synchronous send blocks the request on the
+        // SMTP socket, and a slow provider takes the whole 30s PHP limit with it
+        // — which fataled mid-socket in production, leaving a live OTP row
+        // committed above but never delivered, and markRequested() below never
+        // reached, so the resend cooldown wasn't recorded either.
+        Mail::to($email)->queue(new OtpCodeMail($code, (int) config('otp.ttl_minutes')));
 
         $this->markRequested($email, $ip);
 
