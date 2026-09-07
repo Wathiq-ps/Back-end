@@ -1,5 +1,8 @@
 <?php
 
+use App\Exceptions\Auth\AuthenticationFailedException;
+use App\Exceptions\Auth\AuthorizationFailedException;
+use App\Exceptions\Kyc\KycConflictException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -23,4 +26,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*'),
         );
+
+        // These three all carry their own render() and a stable error_code —
+        // they are expected 4xx outcomes (wrong OTP, email already registered,
+        // KYC state conflict), not faults. Reporting them wrote a ~43-line
+        // stack trace per occurrence into production logs, which buried the
+        // failures that do matter.
+        $exceptions->dontReport([
+            AuthenticationFailedException::class,
+            AuthorizationFailedException::class,
+            KycConflictException::class,
+        ]);
     })->create();
