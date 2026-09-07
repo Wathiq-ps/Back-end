@@ -36,11 +36,9 @@ return new class extends Migration
                 'draft',
                 'pending_verification',
                 'published',
-                'paused',
                 'under_contract',
                 'sold',
                 'rented',
-                'archived',
                 'rejected'
             );
 
