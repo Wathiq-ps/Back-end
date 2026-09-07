@@ -61,16 +61,9 @@ class PropertyService
                 'city' => $data['city'],
                 'district' => $data['district'],
                 'building_number' => $data['building_number'] ?? null,
+                'latitude' => $data['latitude'],
+                'longitude' => $data['longitude'],
             ]);
-
-            // No native Eloquent cast for a PostGIS geography column — set
-            // it with a parameterised raw statement rather than embedding
-            // the (validated, numeric) coordinates into an unparameterised
-            // expression.
-            DB::statement(
-                'update properties set coordinates = ST_SetSRID(ST_MakePoint(?, ?), 4326) where id = ?',
-                [$data['longitude'], $data['latitude'], $property->id],
-            );
 
             $this->attachAmenities($property, $data['features'] ?? []);
             $this->storePhotos($property, $photos);
