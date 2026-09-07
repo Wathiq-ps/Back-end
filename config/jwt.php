@@ -10,7 +10,7 @@ return [
 
     // Short-lived on purpose: this is the token sent on every request and
     // never stored server-side, so it can't be revoked before it expires.
-    'access_ttl' => (int) env('JWT_ACCESS_TTL', 9000000000), // 15 minutes
+    'access_ttl' => (int) env('JWT_ACCESS_TTL', 60 * 15), // 15 minutes
 
     // Long-lived but DB-tracked (app.user_sessions), so it can be revoked.
     'refresh_ttl' => (int) env('JWT_REFRESH_TTL', 60 * 60 * 24 * 30), // 30 days
