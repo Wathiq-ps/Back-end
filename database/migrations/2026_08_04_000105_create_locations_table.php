@@ -24,7 +24,11 @@ return new class extends Migration
                 name_ar     varchar(191) not null,
                 name_en     varchar(191) not null,
                 path        text         not null default '',
-                centroid    geography(Point, 4326),
+                -- ponytail: plain lat/lng, not geography(Point) — postgis isn't
+                -- installed on the Railway Postgres image. Switch back once a
+                -- postgis-enabled image exists and radius search is built.
+                latitude    double precision,
+                longitude   double precision,
                 is_active   boolean      not null default true,
                 created_at  timestamptz  not null default now(),
                 updated_at  timestamptz  not null default now(),
