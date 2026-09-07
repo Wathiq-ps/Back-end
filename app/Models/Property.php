@@ -22,6 +22,7 @@ class Property extends Model
         'price_amount', 'price_currency',
         'area_sqm', 'rooms', 'bathrooms', 'floor_number', 'total_floors', 'year_built', 'is_furnished',
         'location_id', 'address_line', 'city', 'district', 'building_number',
+        'latitude', 'longitude',
         'published_at', 'archived_at',
     ];
 
@@ -30,6 +31,8 @@ class Property extends Model
         return [
             'price_amount' => 'integer',
             'area_sqm' => 'decimal:2',
+            'latitude' => 'float',
+            'longitude' => 'float',
             'is_furnished' => 'boolean',
             'published_at' => 'datetime',
             'archived_at' => 'datetime',
