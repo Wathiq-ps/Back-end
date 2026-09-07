@@ -71,7 +71,11 @@ return new class extends Migration
 
                 location_id        uuid not null references app.locations (id) on delete restrict,
                 address_line       varchar(255),
-                coordinates        geography(Point, 4326),
+                -- ponytail: plain lat/lng, not geography(Point) — postgis isn't
+                -- installed on the Railway Postgres image. Switch back once a
+                -- postgis-enabled image exists and UC-017/UC-025 are built.
+                latitude           double precision,
+                longitude          double precision,
 
                 search_document    tsvector,
 
@@ -112,8 +116,9 @@ return new class extends Migration
             create index properties_price_idx    on app.properties (tenant_id, price_currency, price_amount) where status = 'published';
             create index properties_type_idx     on app.properties (tenant_id, type)     where status = 'published';
 
-            -- Geospatial (UC-017 radius, UC-025 nearest).
-            create index properties_geo_idx on app.properties using gist (coordinates) where status = 'published';
+            -- ponytail: no geo index (UC-017 radius, UC-025 nearest) until
+            -- postgis is back — a gist index needs a geography/geometry
+            -- column, plain doubles can't use it.
 
             create trigger properties_touch
                 before update on app.properties
