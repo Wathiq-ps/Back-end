@@ -3,6 +3,9 @@
 use App\Exceptions\Auth\AuthenticationFailedException;
 use App\Exceptions\Auth\AuthorizationFailedException;
 use App\Exceptions\Kyc\KycConflictException;
+use App\Http\Middleware\EnsureUserIsAdmin;
+use App\Http\Middleware\EnsureUserIsVerified;
+use App\Http\Middleware\JwtAuthenticate;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,9 +20,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'auth.jwt' => \App\Http\Middleware\JwtAuthenticate::class,
-            'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
-            'kyc.verified' => \App\Http\Middleware\EnsureUserIsVerified::class,
+            'auth.jwt' => JwtAuthenticate::class,
+            'admin' => EnsureUserIsAdmin::class,
+            'kyc.verified' => EnsureUserIsVerified::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
