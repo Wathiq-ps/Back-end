@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use App\Exceptions\Auth\AuthorizationFailedException;
 use Illuminate\Support\Str;
 
 /**
@@ -26,6 +27,38 @@ class PropertyService
      * @param  array<int, UploadedFile>  $photos
      * @param  array<int, UploadedFile>  $ownershipDocuments
      */
+    public function publish(User $owner, string $propertyId): Property
+    {
+        $tenantId = Tenant::where('slug', 'default')->value('id');
+
+        abort_if(! $tenantId, 500, 'Default tenant not configured');
+
+        $property = Property::where('id', $propertyId)
+            ->where('tenant_id', $tenantId)
+            ->first();
+
+        if (! $property) {
+            abort(404);
+        }
+
+        if ($property->owner_id !== $owner->id) {
+            throw AuthorizationFailedException::forbidden();
+        }
+
+        if ($property->status !== 'draft') {
+            abort(400, 'Property can only be published from draft status');
+        }
+
+        if ($property->published_at === null) {
+            $property->published_at = now();
+        }
+
+        $property->status = 'published';
+        $property->save();
+
+        return $property->fresh();
+    }
+
     public function create(User $owner, array $data, array $photos, array $ownershipDocuments): Property
     {
         $tenantId = Tenant::where('slug', 'default')->value('id');
@@ -76,7 +109,7 @@ class PropertyService
     private function generateReference(string $tenantId): string
     {
         do {
-            $reference = 'PR-'.strtoupper(Str::random(8));
+            $reference = 'PR-' . strtoupper(Str::random(8));
         } while (Property::where('tenant_id', $tenantId)->where('reference', $reference)->exists());
 
         return $reference;

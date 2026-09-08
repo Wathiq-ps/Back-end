@@ -7,6 +7,7 @@ use App\Http\Requests\Property\StorePropertyRequest;
 use App\Http\Resources\PropertyResource;
 use App\Services\PropertyService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class PropertyController extends Controller
 {
@@ -25,5 +26,17 @@ class PropertyController extends Controller
             'message' => __('Your property was submitted and is pending review.'),
             'property' => new PropertyResource($property),
         ], 201);
+    }
+
+    public function publish(Request $request, string $id): JsonResponse
+    {
+        $property = $this->properties->publish(
+            $request->user(),
+            $id,
+        );
+
+        return response()->json([
+            'property' => new PropertyResource($property),
+        ]);
     }
 }
