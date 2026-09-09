@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\Auth\AuthorizationFailedException;
 use App\Models\Amenity;
 use App\Models\OwnershipDocument;
 use App\Models\Property;
@@ -11,7 +12,6 @@ use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use App\Exceptions\Auth\AuthorizationFailedException;
 use Illuminate\Support\Str;
 
 /**
@@ -23,10 +23,6 @@ class PropertyService
 {
     private const DISK = 'local';
 
-    /**
-     * @param  array<int, UploadedFile>  $photos
-     * @param  array<int, UploadedFile>  $ownershipDocuments
-     */
     public function publish(User $owner, string $propertyId): Property
     {
         $tenantId = Tenant::where('slug', 'default')->value('id');
@@ -59,6 +55,10 @@ class PropertyService
         return $property->fresh();
     }
 
+    /**
+     * @param  array<int, UploadedFile>  $photos
+     * @param  array<int, UploadedFile>  $ownershipDocuments
+     */
     public function create(User $owner, array $data, array $photos, array $ownershipDocuments): Property
     {
         $tenantId = Tenant::where('slug', 'default')->value('id');
@@ -109,7 +109,7 @@ class PropertyService
     private function generateReference(string $tenantId): string
     {
         do {
-            $reference = 'PR-' . strtoupper(Str::random(8));
+            $reference = 'PR-'.strtoupper(Str::random(8));
         } while (Property::where('tenant_id', $tenantId)->where('reference', $reference)->exists());
 
         return $reference;
