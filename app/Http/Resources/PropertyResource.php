@@ -18,6 +18,7 @@ class PropertyResource extends JsonResource
             'id' => $this->id,
             'reference' => $this->reference,
             'status' => $this->status,
+            'published_at' => $this->published_at,
             'listing_type' => $this->listing_type,
             'type' => $this->type,
             'title' => $this->title,
@@ -39,13 +40,13 @@ class PropertyResource extends JsonResource
 
             'features' => $this->amenities->pluck('code')->values(),
 
-            'photos' => $this->media->map(fn ($media) => [
+            'photos' => $this->media->map(fn($media) => [
                 'id' => $media->id,
                 'is_cover' => $media->is_cover,
                 'sort_order' => $media->sort_order,
             ])->values(),
 
-            'ownership_documents' => $this->ownershipDocuments->map(fn ($document) => [
+            'ownership_documents' => $this->ownershipDocuments->map(fn($document) => [
                 'id' => $document->id,
                 'type' => $document->type,
                 'status' => $document->status,
