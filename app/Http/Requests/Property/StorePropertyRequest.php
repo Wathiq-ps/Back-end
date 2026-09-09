@@ -27,6 +27,12 @@ class StorePropertyRequest extends FormRequest
             'area_sqm' => ['required', 'numeric', 'min:0.01'],
             'price' => ['required', 'numeric', 'gt:0'],
             'price_currency' => ['required', 'in:ILS,JOD,USD'],
+            'price_unit' => [
+                'nullable',
+                'required_if:listing_type,rent',
+                'prohibited_if:listing_type,sale',
+                'in:per_month,per_year,per_week,per_day,per_hour',
+            ],
 
             'rooms' => ['nullable', 'integer', 'min:0', 'max:100'],
             'bathrooms' => ['nullable', 'integer', 'min:0', 'max:100'],
@@ -44,7 +50,8 @@ class StorePropertyRequest extends FormRequest
             'ownership_documents' => ['required', 'array', 'min:1', 'max:10'],
             'ownership_documents.*' => ['file', 'mimes:pdf,jpg,jpeg,png', 'max:8192'],
             'ownership_document_type' => [
-                'required', 'in:title_deed,sale_contract,inheritance_deed,power_of_attorney,municipal_record',
+                'required',
+                'in:title_deed,sale_contract,inheritance_deed,power_of_attorney,municipal_record',
             ],
         ];
     }

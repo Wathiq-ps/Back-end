@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\Auth\AuthorizationFailedException;
+use App\Exceptions\Property\PropertyConflictException;
 use App\Models\Amenity;
 use App\Models\OwnershipDocument;
 use App\Models\Property;
@@ -71,6 +72,8 @@ class PropertyService
 
         $priceMinor = (int) round($data['price'] * (10 ** $exponent));
 
+        $this->assertNotDuplicate($owner, $data, $tenantId);
+
         return DB::transaction(function () use ($owner, $data, $photos, $ownershipDocuments, $tenantId, $priceMinor) {
             $property = Property::create([
                 'id' => (string) Str::uuid(),
@@ -84,6 +87,7 @@ class PropertyService
                 'status' => 'pending_verification',
                 'price_amount' => $priceMinor,
                 'price_currency' => $data['price_currency'],
+                'price_unit' => $data['price_unit'] ?? null,
                 'area_sqm' => $data['area_sqm'],
                 'rooms' => $data['rooms'] ?? null,
                 'bathrooms' => $data['bathrooms'] ?? null,
@@ -104,6 +108,27 @@ class PropertyService
 
             return $property->fresh(['media', 'ownershipDocuments', 'amenities']);
         });
+    }
+
+    /**
+     * @throws PropertyConflictException
+     */
+    private function assertNotDuplicate(User $owner, array $data, string $tenantId): void
+    {
+        $isDuplicate = Property::where('tenant_id', $tenantId)
+            ->where('owner_id', $owner->id)
+            ->where('status', 'pending_verification')
+            ->where('type', $data['type'])
+            ->where('listing_type', $data['listing_type'])
+            ->where('city', $data['city'])
+            ->where('district', $data['district'])
+            ->where('building_number', $data['building_number'] ?? null)
+            ->where('area_sqm', $data['area_sqm'])
+            ->exists();
+
+        if ($isDuplicate) {
+            throw PropertyConflictException::duplicatePendingSubmission();
+        }
     }
 
     private function generateReference(string $tenantId): string

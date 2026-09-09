@@ -32,6 +32,7 @@ class PropertyResource extends JsonResource
             'area_sqm' => (float) $this->area_sqm,
             'price' => $this->resolvePriceMajor(),
             'price_currency' => $this->price_currency,
+            'price_unit' => $this->price_unit,
 
             'rooms' => $this->rooms,
             'bathrooms' => $this->bathrooms,
