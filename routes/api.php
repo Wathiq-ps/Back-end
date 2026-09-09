@@ -32,6 +32,8 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(
 // Property owner can publish their own draft property
 Route::patch('v1/properties/{id}/publish', [PropertyController::class, 'publish'])->middleware('auth.jwt');
 
+Route::delete('v1/properties/{id}', [PropertyController::class, 'destroy'])->middleware('auth.jwt');
+
 // UC-031/032-style admin review queue for KYC submissions.
 Route::prefix('v1/admin/kyc')->middleware(['auth.jwt', 'admin'])->name('admin.kyc.')->group(function () {
     Route::get('documents', [AdminIdentityDocumentController::class, 'index'])->name('documents.index');

@@ -59,6 +59,33 @@ class PropertyService
         return $property->fresh();
     }
 
+    public function delete(User $owner, string $propertyId): void
+    {
+        $tenantId = Tenant::where('slug', 'default')->value('id');
+        abort_if(! $tenantId, 500, 'Default tenant not configured');
+        $property = Property::where('id', $propertyId)
+            ->where('tenant_id', $tenantId)
+            ->first();
+
+        if (! $property) {
+            abort(404);
+        }
+
+        if ($property->owner_id !== $owner->id) {
+            throw AuthorizationFailedException::forbidden();
+        }
+
+        if (! in_array($property->status, [
+            'draft',
+            'pending_verification',
+            'published',
+        ], true)) {
+            abort(400, 'Property cannot be deleted in its current status');
+        }
+
+        $property->delete();
+    }
+
     public function create(User $owner, array $data, array $photos, array $ownershipDocuments): Property
     {
         $tenantId = Tenant::where('slug', 'default')->value('id');

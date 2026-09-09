@@ -39,4 +39,15 @@ class PropertyController extends Controller
             'property' => new PropertyResource($property),
         ]);
     }
+
+    public function destroy(Request $request, string $id): JsonResponse
+    {
+        $this->properties->delete(
+            $request->user(),
+            $id,
+        );
+        return response()->json([
+            'message' => 'Property deleted successfully',
+        ]);
+    }
 }
