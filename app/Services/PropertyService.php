@@ -65,6 +65,109 @@ class PropertyService
     }
 
     /**
+     * Location fields identify *which* property this listing is — changing
+     * any of them on a property that was already reviewed (draft, published,
+     * rejected) means what got reviewed no longer matches what's on the
+     * listing, so it goes back to pending_verification. A pending_verification
+     * property is already awaiting that review, so nothing to re-trigger.
+     */
+    private const LOCATION_FIELDS = ['city', 'district', 'building_number', 'latitude', 'longitude'];
+
+    /**
+     * Partial update: only the keys present in $data are touched. Anything
+     * the caller didn't send is left exactly as it is.
+     *
+     * @param  array<int, UploadedFile>  $newPhotos
+     */
+    public function update(User $owner, string $propertyId, array $data, array $newPhotos = []): Property
+    {
+        $tenantId = Tenant::where('slug', 'default')->value('id');
+
+        abort_if(! $tenantId, 500, 'Default tenant not configured.');
+
+        $property = Property::where('id', $propertyId)
+            ->where('tenant_id', $tenantId)
+            ->first();
+
+        if (! $property) {
+            abort(404);
+        }
+
+        if ($property->owner_id !== $owner->id) {
+            throw AuthorizationFailedException::forbidden();
+        }
+
+        if (in_array($property->status, ['under_contract', 'sold', 'rented'], true)) {
+            abort(400, 'Property cannot be edited once it is under contract, sold, or rented.');
+        }
+
+        return DB::transaction(function () use ($property, $data, $newPhotos) {
+            $originalStatus = $property->status;
+            $originalLocation = $property->only(self::LOCATION_FIELDS);
+
+            foreach (array_merge(['listing_type', 'type', 'area_sqm', 'description'], self::LOCATION_FIELDS) as $field) {
+                if (array_key_exists($field, $data)) {
+                    $property->{$field} = $data[$field];
+                }
+            }
+
+            if (array_intersect(['city', 'district', 'building_number'], array_keys($data)) !== []) {
+                $property->address_line = $this->generateAddressLine([
+                    'building_number' => $property->building_number,
+                    'district' => $property->district,
+                    'city' => $property->city,
+                ]);
+            }
+
+            foreach (['rooms', 'bathrooms', 'floor_number', 'is_furnished'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $property->{$field} = $data[$field];
+                }
+            }
+
+            if (array_key_exists('price', $data) || array_key_exists('price_currency', $data)) {
+                $property->price_currency = $data['price_currency'] ?? $property->price_currency;
+                $property->price_amount = $this->resolvePriceMinor(
+                    $data['price'] ?? $this->resolvePriceMajor($property),
+                    $property->price_currency,
+                );
+            }
+
+            if (array_key_exists('price_unit', $data)) {
+                $property->price_unit = $data['price_unit'];
+            }
+
+            // Sale properties never carry a unit; keep that invariant even
+            // when listing_type changes but price_unit itself was left alone.
+            if ($property->listing_type === 'sale') {
+                $property->price_unit = null;
+            }
+
+            $locationChanged = $property->only(self::LOCATION_FIELDS) !== $originalLocation;
+
+            if ($locationChanged && in_array($originalStatus, ['draft', 'published', 'rejected'], true)) {
+                $property->status = 'pending_verification';
+                $property->published_at = null;
+            }
+
+            $property->save();
+
+            if (array_key_exists('features', $data)) {
+                $amenityIds = Amenity::whereIn('code', $data['features'])->pluck('id')->all();
+                $property->amenities()->sync(
+                    array_fill_keys($amenityIds, ['tenant_id' => $property->tenant_id]),
+                );
+            }
+
+            if ($newPhotos !== []) {
+                $this->storePhotos($property, $newPhotos);
+            }
+
+            return $property->fresh(['media', 'ownershipDocuments', 'amenities']);
+        });
+    }
+
+    /**
      * @param  array<int, UploadedFile>  $photos
      * @param  array<int, UploadedFile>  $ownershipDocuments
      */
@@ -74,11 +177,7 @@ class PropertyService
 
         abort_if(! $tenantId, 500, 'Default tenant not configured.');
 
-        $exponent = DB::table('currencies')->where('code', $data['price_currency'])->value('exponent');
-
-        abort_if(is_null($exponent), 422, 'Unsupported currency.');
-
-        $priceMinor = (int) round($data['price'] * (10 ** $exponent));
+        $priceMinor = $this->resolvePriceMinor($data['price'], $data['price_currency']);
 
         $this->assertNotDuplicate($owner, $data, $tenantId);
 
@@ -142,7 +241,7 @@ class PropertyService
     private function generateReference(string $tenantId): string
     {
         do {
-            $reference = 'PR-' . strtoupper(Str::random(8));
+            $reference = 'PR-'.strtoupper(Str::random(8));
         } while (Property::where('tenant_id', $tenantId)->where('reference', $reference)->exists());
 
         return $reference;
@@ -163,6 +262,27 @@ class PropertyService
         return $parts === [] ? null : implode(', ', $parts);
     }
 
+    private function resolvePriceMinor(float $priceMajor, string $currencyCode): int
+    {
+        return (int) round($priceMajor * (10 ** $this->currencyExponent($currencyCode)));
+    }
+
+    private function resolvePriceMajor(Property $property): float
+    {
+        $exponent = $this->currencyExponent($property->price_currency);
+
+        return round($property->price_amount / (10 ** $exponent), $exponent);
+    }
+
+    private function currencyExponent(string $currencyCode): int
+    {
+        $exponent = DB::table('currencies')->where('code', $currencyCode)->value('exponent');
+
+        abort_if(is_null($exponent), 422, 'Unsupported currency.');
+
+        return $exponent;
+    }
+
     private function attachAmenities(Property $property, array $codes): void
     {
         if ($codes === []) {
@@ -177,12 +297,17 @@ class PropertyService
     }
 
     /**
+     * Appends to whatever media the property already has — used both for a
+     * brand new property (nothing to append to) and for adding photos on
+     * update (existing ones are left untouched).
+     *
      * @param  array<int, UploadedFile>  $photos
      */
     private function storePhotos(Property $property, array $photos): void
     {
-        $seenChecksums = [];
-        $sortOrder = 0;
+        $seenChecksums = PropertyMedia::where('property_id', $property->id)->pluck('checksum')->flip()->all();
+        $sortOrder = $seenChecksums === [] ? 0 : ((int) PropertyMedia::where('property_id', $property->id)->max('sort_order')) + 1;
+        $hasCover = PropertyMedia::where('property_id', $property->id)->where('is_cover', true)->exists();
 
         foreach ($photos as $photo) {
             $checksum = hash_file('sha256', $photo->getRealPath());
@@ -209,10 +334,11 @@ class PropertyService
                 'width' => $dimensions[0],
                 'height' => $dimensions[1],
                 'checksum' => $checksum,
-                'is_cover' => $sortOrder === 0,
+                'is_cover' => ! $hasCover,
                 'sort_order' => $sortOrder,
             ]);
 
+            $hasCover = true;
             $sortOrder++;
         }
     }

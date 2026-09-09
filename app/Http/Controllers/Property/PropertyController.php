@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Property;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Property\StorePropertyRequest;
+use App\Http\Requests\Property\UpdatePropertyRequest;
 use App\Http\Resources\PropertyResource;
 use App\Services\PropertyService;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +27,20 @@ class PropertyController extends Controller
             'message' => __('Your property was submitted and is pending review.'),
             'property' => new PropertyResource($property),
         ], 201);
+    }
+
+    public function update(UpdatePropertyRequest $request, string $id): JsonResponse
+    {
+        $property = $this->properties->update(
+            $request->user(),
+            $id,
+            $request->safe()->except('photos'),
+            $request->file('photos', []),
+        );
+
+        return response()->json([
+            'property' => new PropertyResource($property),
+        ]);
     }
 
     public function publish(Request $request, string $id): JsonResponse

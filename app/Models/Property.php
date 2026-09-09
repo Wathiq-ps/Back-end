@@ -3,12 +3,15 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasUuidPrimaryKey;
+use Database\Factories\PropertyFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Property extends Model
 {
-    use HasUuidPrimaryKey, SoftDeletes;
+    /** @use HasFactory<PropertyFactory> */
+    use HasFactory, HasUuidPrimaryKey, SoftDeletes;
 
     protected $table = 'properties';
 
