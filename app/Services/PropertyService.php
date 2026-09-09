@@ -42,6 +42,14 @@ class PropertyService
             throw AuthorizationFailedException::forbidden();
         }
 
+        if ($property->status === 'pending_verification') {
+            abort(400, 'Property is under review and cannot be published until ownership documents are approved');
+        }
+
+        if ($property->status === 'rejected') {
+            abort(400, 'Property was rejected and cannot be published.');
+        }
+
         if ($property->status !== 'draft') {
             abort(400, 'Property can only be published from draft status');
         }
@@ -134,7 +142,7 @@ class PropertyService
     private function generateReference(string $tenantId): string
     {
         do {
-            $reference = 'PR-'.strtoupper(Str::random(8));
+            $reference = 'PR-' . strtoupper(Str::random(8));
         } while (Property::where('tenant_id', $tenantId)->where('reference', $reference)->exists());
 
         return $reference;
