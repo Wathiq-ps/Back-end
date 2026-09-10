@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
         $this->call(RoleSeeder::class);
         $this->call(CurrencySeeder::class);
         $this->call(CountrySeeder::class);
+        $this->call(JurisdictionSeeder::class);
         $this->call(TenantSeeder::class);
         $this->call(AmenitySeeder::class);
 
@@ -26,5 +27,7 @@ class DatabaseSeeder extends Seeder
         User::factory()->create([
             'email' => 'test@example.com',
         ]);
+
+        $this->call(PropertySeeder::class);
     }
 }

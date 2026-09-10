@@ -32,6 +32,7 @@ class PropertyResource extends JsonResource
             'area_sqm' => (float) $this->area_sqm,
             'price' => $this->resolvePriceMajor(),
             'price_currency' => $this->price_currency,
+            'price_unit' => $this->price_unit,
 
             'rooms' => $this->rooms,
             'bathrooms' => $this->bathrooms,
@@ -40,13 +41,13 @@ class PropertyResource extends JsonResource
 
             'features' => $this->amenities->pluck('code')->values(),
 
-            'photos' => $this->media->map(fn($media) => [
+            'photos' => $this->media->map(fn ($media) => [
                 'id' => $media->id,
                 'is_cover' => $media->is_cover,
                 'sort_order' => $media->sort_order,
             ])->values(),
 
-            'ownership_documents' => $this->ownershipDocuments->map(fn($document) => [
+            'ownership_documents' => $this->ownershipDocuments->map(fn ($document) => [
                 'id' => $document->id,
                 'type' => $document->type,
                 'status' => $document->status,

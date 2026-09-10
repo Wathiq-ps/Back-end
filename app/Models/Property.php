@@ -3,12 +3,15 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasUuidPrimaryKey;
+use Database\Factories\PropertyFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Property extends Model
 {
-    use HasUuidPrimaryKey, SoftDeletes;
+    /** @use HasFactory<PropertyFactory> */
+    use HasFactory, HasUuidPrimaryKey, SoftDeletes;
 
     protected $table = 'properties';
 
@@ -17,13 +20,34 @@ class Property extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'id', 'tenant_id', 'reference', 'owner_id',
-        'title', 'description', 'type', 'listing_type', 'status',
-        'price_amount', 'price_currency',
-        'area_sqm', 'rooms', 'bathrooms', 'floor_number', 'total_floors', 'year_built', 'is_furnished',
-        'location_id', 'address_line', 'city', 'district', 'building_number',
-        'latitude', 'longitude',
-        'published_at', 'archived_at',
+        'id',
+        'tenant_id',
+        'reference',
+        'owner_id',
+        'title',
+        'description',
+        'type',
+        'listing_type',
+        'status',
+        'price_amount',
+        'price_currency',
+        'price_unit',
+        'area_sqm',
+        'rooms',
+        'bathrooms',
+        'floor_number',
+        'total_floors',
+        'year_built',
+        'is_furnished',
+        'location_id',
+        'address_line',
+        'city',
+        'district',
+        'building_number',
+        'latitude',
+        'longitude',
+        'published_at',
+        'archived_at',
     ];
 
     protected function casts(): array
