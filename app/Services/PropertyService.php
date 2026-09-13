@@ -64,6 +64,34 @@ class PropertyService
         return $property->fresh();
     }
 
+    public function suspend(User $owner, String $propertyId): Property
+    {
+        $tenantId = Tenant::where('slug', 'default')->value('id');
+        abort_if(! $tenantId, 500, 'Default tenant not configured');
+
+        $property = Property::where('id', $propertyId)
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (! $property) {
+            abort(404);
+        }
+
+        if ($property->owner_id !== $owner->id) {
+            throw AuthorizationFailedException::forbidden();
+        }
+
+        if ($property->status !== 'published') {
+            abort(400, 'Property can only be suspended from published status');
+        }
+
+        $property->status = 'draft';
+        $property->save();
+
+        return $property->fresh();
+    }
+
     public function delete(User $owner, string $propertyId): void
     {
         $tenantId = Tenant::where('slug', 'default')->value('id');

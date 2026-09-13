@@ -92,6 +92,18 @@ class PropertyController extends Controller
         ]);
     }
 
+    public function suspend(Request $request, String $id): JsonResponse
+    {
+        $property = $this->properties->suspend(
+            $request->user(),
+            $id,
+        );
+
+        return response()->json([
+            'property' => new PropertyResource($property),
+        ]);
+    }
+
     public function destroy(Request $request, string $id): JsonResponse
     {
         $this->properties->delete(
