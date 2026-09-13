@@ -86,7 +86,7 @@ class PropertyService
             'pending_verification',
             'published',
         ], true)) {
-            abort(400, 'Property cannot be deleted in its current status');
+            abort(400, 'Property cannot be deleted in its current status.');
         }
 
         $property->delete();
