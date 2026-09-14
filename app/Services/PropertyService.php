@@ -269,7 +269,7 @@ class PropertyService
     private function generateReference(string $tenantId): string
     {
         do {
-            $reference = 'PR-' . strtoupper(Str::random(8));
+            $reference = 'PR-'.strtoupper(Str::random(8));
         } while (Property::where('tenant_id', $tenantId)->where('reference', $reference)->exists());
 
         return $reference;
