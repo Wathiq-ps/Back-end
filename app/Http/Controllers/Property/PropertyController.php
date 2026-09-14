@@ -141,7 +141,7 @@ class PropertyController extends Controller
         ]);
     }
 
-    public function suspend(Request $request, String $id): JsonResponse
+    public function suspend(Request $request, string $id): JsonResponse
     {
         $property = $this->properties->suspend(
             $request->user(),

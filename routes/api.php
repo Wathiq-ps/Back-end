@@ -25,23 +25,17 @@ Route::prefix('v1/kyc')->middleware('auth.jwt')->group(function () {
 });
 
 // Home-page search: public, no auth — browsing published listings.
-
+Route::get('v1/properties/search', [PropertyController::class, 'search']);
 
 // FR-3.x: an owner submits a listing, which starts under review.
 Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(function () {
     Route::get('/my-properties', [PropertyController::class, 'index']);
-    Route::get('/search', [PropertyController::class, 'search']);
     Route::post('/', [PropertyController::class, 'store']);
     Route::patch('/{id}', [PropertyController::class, 'update']);
     Route::patch('/{id}/publish', [PropertyController::class, 'publish']);
-    Route::delete('/{id}', [PropertyController::class, 'destroy']);
     Route::patch('/{id}/suspend', [PropertyController::class, 'suspend']);
+    Route::delete('/{id}', [PropertyController::class, 'destroy']);
 });
-
-// Property owner can publish their own draft property
-// Route::patch('v1/properties/{id}/publish', [PropertyController::class, 'publish'])->middleware('auth.jwt');
-
-Route::delete('v1/properties/{id}', [PropertyController::class, 'destroy'])->middleware('auth.jwt');
 
 // UC-031/032-style admin review queue for KYC submissions.
 Route::prefix('v1/admin/kyc')->middleware(['auth.jwt', 'admin'])->name('admin.kyc.')->group(function () {

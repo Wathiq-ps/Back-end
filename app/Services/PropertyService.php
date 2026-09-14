@@ -64,7 +64,7 @@ class PropertyService
         return $property->fresh();
     }
 
-    public function suspend(User $owner, String $propertyId): Property
+    public function suspend(User $owner, string $propertyId): Property
     {
         $tenantId = Tenant::where('slug', 'default')->value('id');
         abort_if(! $tenantId, 500, 'Default tenant not configured');
