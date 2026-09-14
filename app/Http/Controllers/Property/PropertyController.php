@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Property\StorePropertyRequest;
 use App\Http\Requests\Property\UpdatePropertyRequest;
 use App\Http\Resources\PropertyResource;
+use App\Http\Resources\PropertySearchResource;
 use App\Models\Property;
+use App\Models\Tenant;
 use App\Services\PropertyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,6 +24,11 @@ class PropertyController extends Controller
      * it ever reaches the query.
      */
     private const STATUSES = ['draft', 'pending_verification', 'published', 'under_contract', 'sold', 'rented', 'rejected'];
+
+    /**
+     * app.listing_type is a native Postgres enum — same reasoning as STATUSES.
+     */
+    private const LISTING_TYPES = ['sale', 'rent'];
 
     /**
      * The authenticated owner's own listings, newest first. ?status=draft
@@ -43,6 +50,48 @@ class PropertyController extends Controller
 
         return response()->json([
             'data' => PropertyResource::collection($properties),
+            'meta' => [
+                'current_page' => $properties->currentPage(),
+                'last_page' => $properties->lastPage(),
+                'total' => $properties->total(),
+            ],
+        ]);
+    }
+
+    /**
+     * Public home-page search — no auth required. Only published listings
+     * are visible here; an owner's own draft/pending/rejected listings only
+     * show up in index() ("My properties"). Mirrors the properties_browse_idx
+     * shape: tenant + listing_type + published-only, newest first.
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $tenantId = Tenant::where('slug', 'default')->value('id');
+        abort_if(! $tenantId, 500, 'Default tenant not configured.');
+
+        $query = Property::query()
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'published')
+            ->with(['media', 'amenities'])
+            ->orderByDesc('published_at');
+
+        if ($listingType = $request->query('listing_type')) {
+            abort_unless(in_array($listingType, self::LISTING_TYPES, true), 422, 'Invalid listing_type filter.');
+            $query->where('listing_type', $listingType);
+        }
+
+        if ($city = $request->query('city')) {
+            $query->whereRaw('lower(city) = lower(?)', [$city]);
+        }
+
+        if ($district = $request->query('district')) {
+            $query->whereRaw('lower(district) = lower(?)', [$district]);
+        }
+
+        $properties = $query->paginate(20);
+
+        return response()->json([
+            'data' => PropertySearchResource::collection($properties),
             'meta' => [
                 'current_page' => $properties->currentPage(),
                 'last_page' => $properties->lastPage(),

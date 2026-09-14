@@ -24,9 +24,13 @@ Route::prefix('v1/kyc')->middleware('auth.jwt')->group(function () {
     Route::get('status', [KycIdentityDocumentController::class, 'status']); // this is for test
 });
 
+// Home-page search: public, no auth — browsing published listings.
+
+
 // FR-3.x: an owner submits a listing, which starts under review.
 Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(function () {
     Route::get('/my-properties', [PropertyController::class, 'index']);
+    Route::get('/search', [PropertyController::class, 'search']);
     Route::post('/', [PropertyController::class, 'store']);
     Route::patch('/{id}', [PropertyController::class, 'update']);
 });
