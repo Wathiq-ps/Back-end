@@ -33,10 +33,13 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(
     Route::get('/search', [PropertyController::class, 'search']);
     Route::post('/', [PropertyController::class, 'store']);
     Route::patch('/{id}', [PropertyController::class, 'update']);
+    Route::patch('/{id}/publish', [PropertyController::class, 'publish']);
+    Route::delete('/{id}', [PropertyController::class, 'destroy']);
+    Route::patch('/{id}/suspend', [PropertyController::class, 'suspend']);
 });
 
 // Property owner can publish their own draft property
-Route::patch('v1/properties/{id}/publish', [PropertyController::class, 'publish'])->middleware('auth.jwt');
+// Route::patch('v1/properties/{id}/publish', [PropertyController::class, 'publish'])->middleware('auth.jwt');
 
 Route::delete('v1/properties/{id}', [PropertyController::class, 'destroy'])->middleware('auth.jwt');
 
