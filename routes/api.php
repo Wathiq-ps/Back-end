@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\IdentityDocumentController as AdminIdentityDocumentController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Kyc\IdentityDocumentController as KycIdentityDocumentController;
+use App\Http\Controllers\Profile\ProfileController;
 use App\Http\Controllers\Property\PropertyController;
 use Illuminate\Support\Facades\Route;
 
@@ -18,7 +19,14 @@ Route::prefix('v1/auth')->group(function () {
 
 Route::get('/user', [AuthController::class, 'me'])->middleware('auth.jwt');
 
-// UC-040 KYC: the authenticated user submits their own documents.
+// UC-040 step 1: name, nationality and signature must be on the profile
+// before the KYC upload below will accept anything.
+Route::prefix('v1/profile')->middleware('auth.jwt')->group(function () {
+    Route::get('/', [ProfileController::class, 'show']);
+    Route::patch('/', [ProfileController::class, 'update']);
+});
+
+// UC-040 step 2: the authenticated user submits their own documents.
 Route::prefix('v1/kyc')->middleware('auth.jwt')->group(function () {
     Route::post('documents', [KycIdentityDocumentController::class, 'store']);
     Route::get('status', [KycIdentityDocumentController::class, 'status']); // this is for test

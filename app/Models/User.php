@@ -14,7 +14,10 @@ use Illuminate\Notifications\Notifiable;
  * Passwordless: there is no password column. Identity is proven per-request
  * by a one-time code (app.otp_codes), never stored on the model itself.
  */
-#[Fillable(['email', 'phone', 'locale'])]
+#[Fillable([
+    'email', 'phone', 'locale', 'name', 'nationality', 'signature_path',
+    'document_type', 'document_number', 'date_of_birth',
+])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -33,6 +36,7 @@ class User extends Authenticatable
             'phone_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
             'locked_until' => 'datetime',
+            'date_of_birth' => 'date',
         ];
     }
 
@@ -62,5 +66,25 @@ class User extends Authenticatable
     public function isKycVerified(): bool
     {
         return $this->identityDocuments()->where('status', 'approved')->exists();
+    }
+
+    /**
+     * The profile fields a user must fill in before they are allowed to
+     * submit identity documents. Returned as a list so the API can tell the
+     * caller exactly which screen to send them back to.
+     *
+     * @return list<string>
+     */
+    public function missingProfileFields(): array
+    {
+        return array_values(array_filter(
+            ['name', 'nationality', 'signature_path', 'document_type', 'document_number'],
+            fn (string $field) => blank($this->{$field}),
+        ));
+    }
+
+    public function hasCompleteProfile(): bool
+    {
+        return $this->missingProfileFields() === [];
     }
 }
