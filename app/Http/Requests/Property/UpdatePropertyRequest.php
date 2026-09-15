@@ -52,10 +52,10 @@ class UpdatePropertyRequest extends FormRequest
     }
 
     /**
-     * Cross-field rules (price_unit vs listing_type, land vs rooms) have to
-     * be checked against the *effective* value — the incoming one if the
-     * caller is changing it, otherwise whatever is already on the row —
-     * since either side of the rule might be the one left unchanged.
+     * price_unit vs listing_type has to be checked against the *effective*
+     * value — the incoming one if the caller is changing it, otherwise
+     * whatever is already on the row — since either side of the rule might
+     * be the one left unchanged.
      */
     public function withValidator(Validator $validator): void
     {
@@ -67,7 +67,6 @@ class UpdatePropertyRequest extends FormRequest
             }
 
             $effectiveListingType = $this->input('listing_type', $property->listing_type);
-            $effectiveType = $this->input('type', $property->type);
             $effectivePriceUnit = $this->has('price_unit') ? $this->input('price_unit') : $property->price_unit;
 
             if ($effectiveListingType === 'rent' && $effectivePriceUnit === null) {
@@ -76,18 +75,6 @@ class UpdatePropertyRequest extends FormRequest
 
             if ($effectiveListingType === 'sale' && $this->has('price_unit') && $this->input('price_unit') !== null) {
                 $validator->errors()->add('price_unit', __('The price unit field must not be set when the listing type is sale.'));
-            }
-
-            if ($effectiveType !== 'land') {
-                return;
-            }
-
-            foreach (['rooms', 'bathrooms', 'floor_number'] as $field) {
-                $effectiveValue = $this->has($field) ? $this->input($field) : $property->{$field};
-
-                if ($effectiveValue !== null) {
-                    $validator->errors()->add($field, __('Land properties cannot have :field.', ['field' => $field]));
-                }
             }
         });
     }

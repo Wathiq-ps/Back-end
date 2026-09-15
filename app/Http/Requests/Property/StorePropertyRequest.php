@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\Property;
 
-use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StorePropertyRequest extends FormRequest
@@ -54,25 +53,5 @@ class StorePropertyRequest extends FormRequest
                 'in:title_deed,sale_contract,inheritance_deed,power_of_attorney,municipal_record',
             ],
         ];
-    }
-
-    /**
-     * Mirrors the DB's `properties_land_has_no_rooms` check — land has no
-     * rooms, bathrooms, or floor. Caught here so it's a clean 422 instead
-     * of a constraint-violation 500.
-     */
-    public function withValidator(Validator $validator): void
-    {
-        $validator->after(function (Validator $validator): void {
-            if ($this->input('type') !== 'land') {
-                return;
-            }
-
-            foreach (['rooms', 'bathrooms', 'floor_number'] as $field) {
-                if ($this->filled($field)) {
-                    $validator->errors()->add($field, __('Land properties cannot have :field.', ['field' => $field]));
-                }
-            }
-        });
     }
 }
