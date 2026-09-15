@@ -11,12 +11,15 @@ class SubmitIdentityDocumentRequest extends FormRequest
         return true;
     }
 
+    /**
+     * Only the images are uploaded here. The document type and number are
+     * read from the user's profile — KycService::submit rejects the
+     * submission with `profile_incomplete` if they were never filled in.
+     */
     public function rules(): array
     {
         return [
-            'type' => ['required', 'in:national_id,passport,residency_permit,commercial_register'],
-            'document_number' => ['required', 'string', 'max:64'],
-            'issuing_country_id' => ['nullable', 'uuid'],
+            'issuing_country' => ['nullable', 'string', 'max:100'],
             'front_image' => ['required', 'image', 'max:8192'],
             'selfie_image' => ['required', 'image', 'max:8192'],
         ];

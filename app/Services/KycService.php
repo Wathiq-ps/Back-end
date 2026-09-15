@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\Kyc\KycConflictException;
+use App\Exceptions\Kyc\ProfileIncompleteException;
 use App\Models\IdentityDocument;
 use App\Models\Tenant;
 use App\Models\User;
@@ -21,17 +22,20 @@ class KycService
 
     /**
      * @throws KycConflictException
+     * @throws ProfileIncompleteException
      */
     public function submit(
         User $user,
         UploadedFile $frontImage,
         UploadedFile $selfieImage,
-        string $type,
-        ?string $documentNumber,
-        ?string $issuingCountryId,
+        ?string $issuingCountry,
     ): IdentityDocument {
         if ($user->isKycVerified()) {
             throw KycConflictException::alreadyVerified();
+        }
+
+        if (! $user->hasCompleteProfile()) {
+            throw new ProfileIncompleteException($user->missingProfileFields());
         }
 
         $hasPending = IdentityDocument::where('user_id', $user->id)
@@ -52,9 +56,11 @@ class KycService
             'id' => (string) Str::uuid(),
             'tenant_id' => $tenantId,
             'user_id' => $user->id,
-            'type' => $type,
-            'document_number' => $documentNumber ?? '',
-            'issuing_country_id' => $issuingCountryId,
+            // Copied from the profile, which the completeness check above
+            // guarantees is filled in.
+            'type' => $user->document_type,
+            'document_number' => $user->document_number,
+            'issuing_country' => $issuingCountry,
             'front_path' => $frontPath,
             'selfie_path' => $selfiePath,
             'status' => 'pending',

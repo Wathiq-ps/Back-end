@@ -20,9 +20,7 @@ class IdentityDocumentController extends Controller
             $request->user(),
             $request->file('front_image'),
             $request->file('selfie_image'),
-            $request->validated('type'),
-            $request->validated('document_number'),
-            $request->validated('issuing_country_id'),
+            $request->validated('issuing_country'),
         );
 
         return response()->json([

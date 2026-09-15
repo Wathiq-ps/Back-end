@@ -17,7 +17,7 @@ class IdentityDocument extends Model
 
     protected $fillable = [
         'id', 'tenant_id', 'user_id', 'type', 'document_number',
-        'issuing_country_id', 'front_path', 'back_path', 'selfie_path',
+        'issuing_country', 'front_path', 'back_path', 'selfie_path',
         'expires_on', 'status', 'reviewed_by', 'reviewed_at', 'rejection_reason',
     ];
 

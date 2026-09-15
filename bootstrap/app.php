@@ -3,6 +3,7 @@
 use App\Exceptions\Auth\AuthenticationFailedException;
 use App\Exceptions\Auth\AuthorizationFailedException;
 use App\Exceptions\Kyc\KycConflictException;
+use App\Exceptions\Kyc\ProfileIncompleteException;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserIsVerified;
 use App\Http\Middleware\JwtAuthenticate;
@@ -39,5 +40,6 @@ return Application::configure(basePath: dirname(__DIR__))
             AuthenticationFailedException::class,
             AuthorizationFailedException::class,
             KycConflictException::class,
+            ProfileIncompleteException::class,
         ]);
     })->create();
