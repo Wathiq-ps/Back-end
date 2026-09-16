@@ -15,18 +15,18 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call(RoleSeeder::class);
-        $this->call(CurrencySeeder::class);
-        $this->call(CountrySeeder::class);
-        $this->call(JurisdictionSeeder::class);
-        $this->call(TenantSeeder::class);
-        $this->call(AmenitySeeder::class);
+        // $this->call(RoleSeeder::class);
+        // $this->call(CurrencySeeder::class);
+        // $this->call(CountrySeeder::class);
+        // $this->call(JurisdictionSeeder::class);
+        // $this->call(TenantSeeder::class);
+        // $this->call(AmenitySeeder::class);
 
-        // User::factory(10)->create();
+        // // User::factory(10)->create();
 
-        User::factory()->create([
-            'email' => 'test@example.com',
-        ]);
+        // User::factory()->create([
+        //     'email' => 'test@example.com',
+        // ]);
 
         $this->call(PropertySeeder::class);
     }
