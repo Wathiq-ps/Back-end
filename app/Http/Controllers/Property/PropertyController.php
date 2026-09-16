@@ -7,6 +7,7 @@ use App\Http\Requests\Property\StorePropertyRequest;
 use App\Http\Requests\Property\UpdatePropertyRequest;
 use App\Http\Resources\PropertyResource;
 use App\Http\Resources\PropertySearchResource;
+use App\Http\Resources\TopRatedPropertyResource;
 use App\Models\Property;
 use App\Models\Tenant;
 use App\Services\PropertyService;
@@ -29,6 +30,11 @@ class PropertyController extends Controller
      * app.listing_type is a native Postgres enum — same reasoning as STATUSES.
      */
     private const LISTING_TYPES = ['sale', 'rent'];
+
+    /**
+     * Home-page "top rated" widget.
+     */
+    private const TOP_RATED_LIMIT = 5;
 
     /**
      * The authenticated owner's own listings, newest first. ?status=draft
@@ -97,6 +103,56 @@ class PropertyController extends Controller
                 'last_page' => $properties->lastPage(),
                 'total' => $properties->total(),
             ],
+        ]);
+    }
+
+    /**
+     * Public home-page "top rated" — up to 5 published listings, rated ones
+     * first (highest average rating first). The rating join is inner, not
+     * left: a property with no ratings has nothing to rank it by, so it
+     * never displaces a rated one. But the widget still needs content on a
+     * near-empty marketplace, so once rated listings run out the remaining
+     * slots are backfilled with the newest published listings instead of
+     * leaving the response short (or, with zero ratings anywhere, blank).
+     */
+    public function topRated(Request $request): JsonResponse
+    {
+        $tenantId = Tenant::where('slug', 'default')->value('id');
+        abort_if(! $tenantId, 500, 'Default tenant not configured.');
+
+        $rated = Property::query()
+            ->select('properties.*')
+            ->selectRaw('avg(property_ratings.score) as average_rating')
+            ->selectRaw('count(property_ratings.id) as ratings_count')
+            ->join('property_ratings', 'property_ratings.property_id', '=', 'properties.id')
+            ->where('properties.tenant_id', $tenantId)
+            ->where('properties.status', 'published')
+            ->with(['media', 'amenities'])
+            ->groupBy('properties.id')
+            ->orderByDesc('average_rating')
+            ->orderByDesc('ratings_count')
+            ->orderByDesc('properties.published_at')
+            ->limit(self::TOP_RATED_LIMIT)
+            ->get();
+
+        $properties = $rated;
+        $remaining = self::TOP_RATED_LIMIT - $rated->count();
+
+        if ($remaining > 0) {
+            $newest = Property::query()
+                ->where('tenant_id', $tenantId)
+                ->where('status', 'published')
+                ->whereNotIn('id', $rated->pluck('id'))
+                ->with(['media', 'amenities'])
+                ->orderByDesc('published_at')
+                ->limit($remaining)
+                ->get();
+
+            $properties = $rated->concat($newest);
+        }
+
+        return response()->json([
+            'data' => TopRatedPropertyResource::collection($properties),
         ]);
     }
 

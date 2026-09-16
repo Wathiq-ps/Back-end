@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Kyc\IdentityDocumentController as KycIdentityDocumentController;
 use App\Http\Controllers\Profile\ProfileController;
 use App\Http\Controllers\Property\PropertyController;
+use App\Http\Controllers\Property\PropertyRatingController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/auth')->group(function () {
@@ -35,6 +36,13 @@ Route::prefix('v1/kyc')->middleware('auth.jwt')->group(function () {
 // Home-page search: public, no auth — browsing published listings.
 Route::get('v1/properties/search', [PropertyController::class, 'search']);
 
+// Home-page "top rated": public, no auth — the 5 highest-rated published listings.
+Route::get('v1/properties/top-rated', [PropertyController::class, 'topRated']);
+
+// A rating is earned by the beneficiary of a completed contract on the
+// property (see PropertyRatingService) — auth required, no ownership or
+// KYC gate beyond that, since having a completed contract already implies it.
+
 // FR-3.x: an owner submits a listing, which starts under review.
 Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(function () {
     Route::get('/my-properties', [PropertyController::class, 'index']);
@@ -43,6 +51,8 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(
     Route::patch('/{id}/publish', [PropertyController::class, 'publish']);
     Route::patch('/{id}/suspend', [PropertyController::class, 'suspend']);
     Route::delete('/{id}', [PropertyController::class, 'destroy']);
+
+    Route::post('/{id}/ratings', [PropertyRatingController::class, 'store']);
 });
 
 // UC-031/032-style admin review queue for KYC submissions.

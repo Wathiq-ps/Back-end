@@ -21,6 +21,14 @@ class PropertyConflictException extends Exception
         );
     }
 
+    public static function alreadyRated(): self
+    {
+        return new self(
+            'You already rated this property for this contract.',
+            'property_already_rated',
+        );
+    }
+
     public function render(Request $request): JsonResponse
     {
         return response()->json([

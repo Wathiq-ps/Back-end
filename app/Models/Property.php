@@ -82,4 +82,9 @@ class Property extends Model
     {
         return $this->belongsToMany(Amenity::class, 'property_amenities');
     }
+
+    public function ratings()
+    {
+        return $this->hasMany(PropertyRating::class);
+    }
 }
