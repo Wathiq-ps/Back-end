@@ -29,6 +29,14 @@ class PropertyConflictException extends Exception
         );
     }
 
+    public static function duplicatePendingRequest(): self
+    {
+        return new self(
+            'You already have a pending request on this property.',
+            'property_request_duplicate_pending',
+        );
+    }
+
     public function render(Request $request): JsonResponse
     {
         return response()->json([

@@ -6,6 +6,7 @@ use App\Http\Controllers\Kyc\IdentityDocumentController as KycIdentityDocumentCo
 use App\Http\Controllers\Profile\ProfileController;
 use App\Http\Controllers\Property\PropertyController;
 use App\Http\Controllers\Property\PropertyRatingController;
+use App\Http\Controllers\Property\PropertyRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/auth')->group(function () {
@@ -54,6 +55,8 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(
     Route::delete('/{id}', [PropertyController::class, 'destroy']);
 
     Route::post('/{id}/ratings', [PropertyRatingController::class, 'store']);
+
+    Route::post('/{id}/requests', [PropertyRequestController::class, 'store']);
 });
 
 // UC-031/032-style admin review queue for KYC submissions.
