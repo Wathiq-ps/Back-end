@@ -24,6 +24,10 @@ class PropertyRequestResource extends JsonResource
                 'reference' => $this->property?->reference,
                 'title' => $this->property?->title,
             ],
+            'lawyer' => $this->lawyer_id ? [
+                'id' => $this->lawyer?->id,
+                'name' => $this->lawyer?->name,
+            ] : null,
             'created_at' => $this->created_at,
         ];
     }

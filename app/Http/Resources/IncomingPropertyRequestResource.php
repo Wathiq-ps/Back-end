@@ -35,6 +35,11 @@ class IncomingPropertyRequestResource extends JsonResource
                 'email' => $this->requester?->email,
                 'phone' => $this->requester?->phone,
             ],
+            'lawyer' => $this->lawyer_id ? [
+                'id' => $this->lawyer?->id,
+                'name' => $this->lawyer?->name,
+                'email' => $this->lawyer?->email,
+            ] : null,
             'created_at' => $this->created_at,
         ];
     }

@@ -9,6 +9,7 @@ use App\Models\Property;
 use App\Models\PropertyRequest;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -88,6 +89,43 @@ class PropertyRequestService
             'responded_at' => now(),
             'response_note' => $reason,
         ])->save();
+
+        return $propertyRequest;
+    }
+
+    /**
+     * The owner accepts a pending request by handing it to a lawyer — this
+     * does not itself decide the request: status stays 'pending', and
+     * lawyer_id being set is what marks it as "awaiting the lawyer" rather
+     * than "awaiting the owner". The lawyer's own accept/reject is separate,
+     * not-yet-built work.
+     */
+    public function accept(User $owner, PropertyRequest $propertyRequest, string $lawyerId): PropertyRequest
+    {
+        $property = $propertyRequest->property;
+
+        if (! $property || $property->owner_id !== $owner->id) {
+            throw AuthorizationFailedException::forbidden();
+        }
+
+        if ($propertyRequest->status !== 'pending') {
+            abort(409, 'This request has already been responded to.');
+        }
+
+        if ($propertyRequest->lawyer_id !== null) {
+            abort(409, 'This request has already been forwarded to a lawyer.');
+        }
+
+        $isVerifiedLawyer = DB::table('lawyer_credentials')
+            ->where('user_id', $lawyerId)
+            ->whereNotNull('verified_at')
+            ->exists();
+
+        if (! $isVerifiedLawyer) {
+            abort(422, 'The selected lawyer is not a verified lawyer.');
+        }
+
+        $propertyRequest->forceFill(['lawyer_id' => $lawyerId])->save();
 
         return $propertyRequest;
     }

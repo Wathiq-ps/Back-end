@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Property;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Property\AcceptPropertyRequestRequest;
 use App\Http\Requests\Property\RejectPropertyRequestRequest;
 use App\Http\Requests\Property\SubmitPropertyRequestRequest;
 use App\Http\Resources\IncomingPropertyRequestResource;
@@ -125,6 +126,25 @@ class PropertyRequestController extends Controller
         return response()->json([
             'message' => __('Request rejected.'),
             'data' => new IncomingPropertyRequestResource($propertyRequest->fresh(['property', 'requester'])),
+        ]);
+    }
+
+    /**
+     * Owner accepts a pending request by assigning a lawyer to review it.
+     * This does not itself finalize the request — see
+     * PropertyRequestService::accept().
+     */
+    public function accept(PropertyRequest $propertyRequest, AcceptPropertyRequestRequest $request): JsonResponse
+    {
+        $propertyRequest = $this->requests->accept(
+            $request->user(),
+            $propertyRequest,
+            $request->validated('lawyer_id'),
+        );
+
+        return response()->json([
+            'message' => __('Request accepted and forwarded to the lawyer for review.'),
+            'data' => new IncomingPropertyRequestResource($propertyRequest->fresh(['property', 'requester', 'lawyer'])),
         ]);
     }
 }

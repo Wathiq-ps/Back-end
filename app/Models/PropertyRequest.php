@@ -16,7 +16,7 @@ class PropertyRequest extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'id', 'tenant_id', 'reference', 'property_id', 'requester_id', 'type',
+        'id', 'tenant_id', 'reference', 'property_id', 'requester_id', 'lawyer_id', 'type',
         'offered_amount', 'offered_currency', 'term_start', 'term_end', 'message',
         'status', 'responded_by', 'responded_at', 'response_note', 'expires_at', 'closed_at',
     ];
@@ -41,5 +41,10 @@ class PropertyRequest extends Model
     public function requester()
     {
         return $this->belongsTo(User::class, 'requester_id');
+    }
+
+    public function lawyer()
+    {
+        return $this->belongsTo(User::class, 'lawyer_id');
     }
 }
