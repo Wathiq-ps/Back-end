@@ -54,7 +54,6 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(
 
     Route::post('/{id}/ratings', [PropertyRatingController::class, 'store']);
 
-
     // Requester-side(User): submit a request, and track the ones already sent.
     Route::post('/{id}/requests', [PropertyRequestController::class, 'store']);
     Route::get('/my-requests', [PropertyRequestController::class, 'mine']);
