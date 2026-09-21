@@ -42,7 +42,7 @@ Route::get('v1/properties/home', [PropertyController::class, 'home']);
 // FR-3.x: an owner submits a listing, which starts under review.
 Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(function () {
 
-    // owner endpoints
+    // Owner endpoints
     Route::get('/my-properties', [PropertyController::class, 'index']);
     Route::post('/', [PropertyController::class, 'store']);
     Route::patch('/{id}', [PropertyController::class, 'update']);
@@ -54,7 +54,10 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(
 
     Route::post('/{id}/ratings', [PropertyRatingController::class, 'store']);
 
+
+    // Requester-side(User): submit a request, and track the ones already sent.
     Route::post('/{id}/requests', [PropertyRequestController::class, 'store']);
+    Route::get('/my-requests', [PropertyRequestController::class, 'mine']);
 });
 
 // UC-031/032-style admin review queue for KYC submissions.

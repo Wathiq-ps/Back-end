@@ -72,4 +72,40 @@ class PropertyRequestController extends Controller
             ],
         ]);
     }
+
+    /**
+     * The requester's own history: every request they've sent, any status.
+     * Unlike incoming() there's no "needs action" framing here — the sender
+     * is just tracking what happened, so nothing is filtered out by
+     * default; ?status=pending|accepted|... narrows it down.
+     */
+    public function mine(Request $request): JsonResponse
+    {
+        $tenantId = Tenant::where('slug', 'default')->value('id');
+        abort_if(! $tenantId, 500, 'Default tenant not configured.');
+
+        $status = $request->query('status');
+
+        $query = PropertyRequest::query()
+            ->where('tenant_id', $tenantId)
+            ->where('requester_id', $request->user()->id)
+            ->with('property')
+            ->orderByDesc('created_at');
+
+        if ($status !== null) {
+            abort_unless(in_array($status, self::STATUSES, true), 422, 'Invalid status filter.');
+            $query->where('status', $status);
+        }
+
+        $propertyRequests = $query->paginate(20);
+
+        return response()->json([
+            'data' => PropertyRequestResource::collection($propertyRequests),
+            'meta' => [
+                'current_page' => $propertyRequests->currentPage(),
+                'last_page' => $propertyRequests->lastPage(),
+                'total' => $propertyRequests->total(),
+            ],
+        ]);
+    }
 }

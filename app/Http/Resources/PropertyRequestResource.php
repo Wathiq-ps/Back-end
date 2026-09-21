@@ -12,12 +12,18 @@ class PropertyRequestResource extends JsonResource
         return [
             'id' => $this->id,
             'reference' => $this->reference,
-            'property_id' => $this->property_id,
             'type' => $this->type,
             'term_start' => $this->term_start,
             'term_end' => $this->term_end,
             'message' => $this->message,
             'status' => $this->status,
+            'response_note' => $this->response_note,
+            'responded_at' => $this->responded_at,
+            'property' => [
+                'id' => $this->property?->id ?? $this->property_id,
+                'reference' => $this->property?->reference,
+                'title' => $this->property?->title,
+            ],
             'created_at' => $this->created_at,
         ];
     }
