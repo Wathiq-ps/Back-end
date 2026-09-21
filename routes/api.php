@@ -34,11 +34,10 @@ Route::prefix('v1/kyc')->middleware('auth.jwt')->group(function () {
     Route::get('status', [KycIdentityDocumentController::class, 'status']); // this is for test
 });
 
-//User endpoints
+// User endpoints
 Route::get('v1/properties/search', [PropertyController::class, 'search']);
 
 Route::get('v1/properties/home', [PropertyController::class, 'home']);
-
 
 // FR-3.x: an owner submits a listing, which starts under review.
 Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(function () {
