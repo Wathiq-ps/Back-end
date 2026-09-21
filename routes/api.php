@@ -34,25 +34,24 @@ Route::prefix('v1/kyc')->middleware('auth.jwt')->group(function () {
     Route::get('status', [KycIdentityDocumentController::class, 'status']); // this is for test
 });
 
-// Home-page search: public, no auth — browsing published listings.
+//User endpoints
 Route::get('v1/properties/search', [PropertyController::class, 'search']);
 
-// Home page: public, no auth — one response, both widgets, each under its
-// own key (top_rated / featured). See PropertyController::home().
 Route::get('v1/properties/home', [PropertyController::class, 'home']);
 
-// A rating is earned by the beneficiary of a completed contract on the
-// property (see PropertyRatingService) — auth required, no ownership or
-// KYC gate beyond that, since having a completed contract already implies it.
 
 // FR-3.x: an owner submits a listing, which starts under review.
 Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(function () {
+
+    // owner endpoints
     Route::get('/my-properties', [PropertyController::class, 'index']);
     Route::post('/', [PropertyController::class, 'store']);
     Route::patch('/{id}', [PropertyController::class, 'update']);
     Route::patch('/{id}/publish', [PropertyController::class, 'publish']);
     Route::patch('/{id}/suspend', [PropertyController::class, 'suspend']);
     Route::delete('/{id}', [PropertyController::class, 'destroy']);
+
+    Route::get('/incoming-requests', [PropertyRequestController::class, 'incoming']);
 
     Route::post('/{id}/ratings', [PropertyRatingController::class, 'store']);
 
