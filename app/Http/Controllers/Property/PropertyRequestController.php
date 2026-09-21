@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Property;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Property\RejectPropertyRequestRequest;
 use App\Http\Requests\Property\SubmitPropertyRequestRequest;
 use App\Http\Resources\IncomingPropertyRequestResource;
 use App\Http\Resources\PropertyRequestResource;
@@ -106,6 +107,24 @@ class PropertyRequestController extends Controller
                 'last_page' => $propertyRequests->lastPage(),
                 'total' => $propertyRequests->total(),
             ],
+        ]);
+    }
+
+    /**
+     * Owner rejects a pending request against one of their own properties.
+     * A reason is required — see RejectPropertyRequestRequest.
+     */
+    public function reject(PropertyRequest $propertyRequest, RejectPropertyRequestRequest $request): JsonResponse
+    {
+        $propertyRequest = $this->requests->reject(
+            $request->user(),
+            $propertyRequest,
+            $request->validated('reason'),
+        );
+
+        return response()->json([
+            'message' => __('Request rejected.'),
+            'data' => new IncomingPropertyRequestResource($propertyRequest->fresh(['property', 'requester'])),
         ]);
     }
 }

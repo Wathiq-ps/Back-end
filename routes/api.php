@@ -51,6 +51,7 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(
     Route::delete('/{id}', [PropertyController::class, 'destroy']);
 
     Route::get('/incoming-requests', [PropertyRequestController::class, 'incoming']);
+    Route::patch('/requests/{propertyRequest}/reject', [PropertyRequestController::class, 'reject']);
 
     Route::post('/{id}/ratings', [PropertyRatingController::class, 'store']);
 

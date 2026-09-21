@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\Auth\AuthorizationFailedException;
 use App\Exceptions\Property\PropertyConflictException;
 use App\Exceptions\Property\PropertyRequestNotAllowedException;
 use App\Models\Property;
@@ -61,6 +62,34 @@ class PropertyRequestService
             'message' => $data['message'] ?? null,
             'status' => 'pending',
         ]);
+    }
+
+    /**
+     * The owner rejects a pending request against one of their own
+     * properties. A reason is mandatory — requests_response_complete
+     * doesn't require it (that's response_note, not responded_by/at), but
+     * the owner-facing product rule is stricter than the DB constraint.
+     */
+    public function reject(User $owner, PropertyRequest $propertyRequest, string $reason): PropertyRequest
+    {
+        $property = $propertyRequest->property;
+
+        if (! $property || $property->owner_id !== $owner->id) {
+            throw AuthorizationFailedException::forbidden();
+        }
+
+        if ($propertyRequest->status !== 'pending') {
+            abort(409, 'This request has already been responded to.');
+        }
+
+        $propertyRequest->forceFill([
+            'status' => 'rejected',
+            'responded_by' => $owner->id,
+            'responded_at' => now(),
+            'response_note' => $reason,
+        ])->save();
+
+        return $propertyRequest;
     }
 
     private function generateReference(string $tenantId): string
