@@ -1,0 +1,13 @@
+#!/bin/sh
+# Auto-fix Pint style on staged PHP files, so a formatting nit can never fail CI.
+# Enabled by `composer install` (post-install-cmd sets core.hooksPath).
+
+[ -x vendor/bin/pint ] || exit 0
+
+files=$(git diff --cached --name-only --diff-filter=ACM -- '*.php')
+[ -z "$files" ] && exit 0
+
+# ponytail: breaks on paths with spaces/newlines; none exist here. Upgrade path:
+# `git diff --cached -z` + `xargs -0` if that ever changes.
+echo "$files" | xargs vendor/bin/pint -q
+echo "$files" | xargs git add
