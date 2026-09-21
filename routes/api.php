@@ -36,8 +36,9 @@ Route::prefix('v1/kyc')->middleware('auth.jwt')->group(function () {
 // Home-page search: public, no auth — browsing published listings.
 Route::get('v1/properties/search', [PropertyController::class, 'search']);
 
-// Home-page "top rated": public, no auth — the 5 highest-rated published listings.
-Route::get('v1/properties/top-rated', [PropertyController::class, 'topRated']);
+// Home page: public, no auth — one response, both widgets, each under its
+// own key (top_rated / featured). See PropertyController::home().
+Route::get('v1/properties/home', [PropertyController::class, 'home']);
 
 // A rating is earned by the beneficiary of a completed contract on the
 // property (see PropertyRatingService) — auth required, no ownership or

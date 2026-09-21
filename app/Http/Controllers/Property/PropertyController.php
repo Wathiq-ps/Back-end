@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Property;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Property\StorePropertyRequest;
 use App\Http\Requests\Property\UpdatePropertyRequest;
+use App\Http\Resources\FeaturedPropertyResource;
 use App\Http\Resources\PropertyResource;
 use App\Http\Resources\PropertySearchResource;
 use App\Http\Resources\TopRatedPropertyResource;
@@ -35,6 +36,11 @@ class PropertyController extends Controller
      * Home-page "top rated" widget.
      */
     private const TOP_RATED_LIMIT = 5;
+
+    /**
+     * Home-page "featured" widget.
+     */
+    private const FEATURED_LIMIT = 5;
 
     /**
      * The authenticated owner's own listings, newest first. ?status=draft
@@ -107,19 +113,32 @@ class PropertyController extends Controller
     }
 
     /**
-     * Public home-page "top rated" — up to 5 published listings, rated ones
-     * first (highest average rating first). The rating join is inner, not
-     * left: a property with no ratings has nothing to rank it by, so it
-     * never displaces a rated one. But the widget still needs content on a
-     * near-empty marketplace, so once rated listings run out the remaining
-     * slots are backfilled with the newest published listings instead of
-     * leaving the response short (or, with zero ratings anywhere, blank).
+     * Public home page: both widgets in one response, each under its own
+     * key, since they're rendered on the same page but ranked by different
+     * rules (see the two private helpers below).
      */
-    public function topRated(Request $request): JsonResponse
+    public function home(Request $request): JsonResponse
     {
         $tenantId = Tenant::where('slug', 'default')->value('id');
         abort_if(! $tenantId, 500, 'Default tenant not configured.');
 
+        return response()->json([
+            'top_rated' => TopRatedPropertyResource::collection($this->topRatedProperties($tenantId)),
+            'featured' => FeaturedPropertyResource::collection($this->featuredProperties($tenantId)),
+        ]);
+    }
+
+    /**
+     * "Top rated" — up to 5 published listings, rated ones first (highest
+     * average rating first). The rating join is inner, not left: a property
+     * with no ratings has nothing to rank it by, so it never displaces a
+     * rated one. But the widget still needs content on a near-empty
+     * marketplace, so once rated listings run out the remaining slots are
+     * backfilled with the newest published listings instead of leaving the
+     * response short (or, with zero ratings anywhere, blank).
+     */
+    private function topRatedProperties(string $tenantId)
+    {
         $rated = Property::query()
             ->select('properties.*')
             ->selectRaw('avg(property_ratings.score) as average_rating')
@@ -135,25 +154,48 @@ class PropertyController extends Controller
             ->limit(self::TOP_RATED_LIMIT)
             ->get();
 
-        $properties = $rated;
         $remaining = self::TOP_RATED_LIMIT - $rated->count();
 
-        if ($remaining > 0) {
-            $newest = Property::query()
-                ->where('tenant_id', $tenantId)
-                ->where('status', 'published')
-                ->whereNotIn('id', $rated->pluck('id'))
-                ->with(['media', 'amenities'])
-                ->orderByDesc('published_at')
-                ->limit($remaining)
-                ->get();
-
-            $properties = $rated->concat($newest);
+        if ($remaining === 0) {
+            return $rated;
         }
 
-        return response()->json([
-            'data' => TopRatedPropertyResource::collection($properties),
-        ]);
+        $newest = Property::query()
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'published')
+            ->whereNotIn('id', $rated->pluck('id'))
+            ->with(['media', 'amenities'])
+            ->orderByDesc('published_at')
+            ->limit($remaining)
+            ->get();
+
+        return $rated->concat($newest);
+    }
+
+    /**
+     * "Featured" — up to 5 published listings staff have curated with
+     * is_featured (see the migration; there is no owner-facing way to set
+     * it). Distinct from topRatedProperties(): this is a hard filter, not a
+     * ranking, so it can return fewer than 5 (or none) rather than padding
+     * with non-featured listings. Rated featured listings still lead, since
+     * "featured" and "well-rated" aren't mutually exclusive.
+     */
+    private function featuredProperties(string $tenantId)
+    {
+        return Property::query()
+            ->select('properties.*')
+            ->selectRaw('avg(property_ratings.score) as average_rating')
+            ->selectRaw('count(property_ratings.id) as ratings_count')
+            ->leftJoin('property_ratings', 'property_ratings.property_id', '=', 'properties.id')
+            ->where('properties.tenant_id', $tenantId)
+            ->where('properties.status', 'published')
+            ->where('properties.is_featured', true)
+            ->with(['media', 'amenities'])
+            ->groupBy('properties.id')
+            ->orderByRaw('avg(property_ratings.score) desc nulls last')
+            ->orderByDesc('properties.published_at')
+            ->limit(self::FEATURED_LIMIT)
+            ->get();
     }
 
     public function store(StorePropertyRequest $request): JsonResponse

@@ -58,6 +58,7 @@ class Property extends Model
             'latitude' => 'float',
             'longitude' => 'float',
             'is_furnished' => 'boolean',
+            'is_featured' => 'boolean',
             'published_at' => 'datetime',
             'archived_at' => 'datetime',
         ];
