@@ -23,7 +23,7 @@ class PropertyRequestController extends Controller
      * PropertyController::STATUSES: an unrecognised ?status must be
      * rejected before it reaches the query, or it's a 500, not "no match".
      */
-    private const STATUSES = ['pending', 'accepted', 'rejected', 'cancelled', 'closed', 'expired'];
+    private const STATUSES = ['pending', 'pending_lawyer_review', 'accepted', 'rejected', 'cancelled', 'closed', 'expired'];
 
     public function store(SubmitPropertyRequestRequest $request, string $id): JsonResponse
     {
@@ -42,8 +42,9 @@ class PropertyRequestController extends Controller
     /**
      * The owner's inbox: every request against any property they own.
      * Defaults to 'pending' — the only ones that actually need a decision
-     * (approve/reject) — since that's what this endpoint is for; pass
-     * ?status=accepted|rejected|... or ?status=all to see the rest.
+     * from the owner, since anything they already accepted has moved to
+     * 'pending_lawyer_review' and is the lawyer's to answer. Pass
+     * ?status=pending_lawyer_review|accepted|... or ?status=all for the rest.
      */
     public function incoming(Request $request): JsonResponse
     {

@@ -42,9 +42,12 @@ class PropertyRequestService
             throw PropertyRequestNotAllowedException::cannotRequestOwnProperty();
         }
 
+        // Both statuses are a live request from this requester — one waiting
+        // on the owner, one already with the lawyer. Neither leaves room for
+        // a second request on the same property.
         $hasPending = PropertyRequest::where('property_id', $propertyId)
             ->where('requester_id', $requester->id)
-            ->where('status', 'pending')
+            ->whereIn('status', ['pending', 'pending_lawyer_review'])
             ->exists();
 
         if ($hasPending) {
@@ -95,10 +98,10 @@ class PropertyRequestService
 
     /**
      * The owner accepts a pending request by handing it to a lawyer — this
-     * does not itself decide the request: status stays 'pending', and
-     * lawyer_id being set is what marks it as "awaiting the lawyer" rather
-     * than "awaiting the owner". The lawyer's own accept/reject is separate,
-     * not-yet-built work.
+     * does not itself decide the request. It moves to
+     * 'pending_lawyer_review', which is what separates "waiting on the
+     * lawyer" from the plain 'pending' that means "waiting on the owner".
+     * The lawyer's own accept/reject is separate, not-yet-built work.
      */
     public function accept(User $owner, PropertyRequest $propertyRequest, string $lawyerId): PropertyRequest
     {
@@ -108,12 +111,12 @@ class PropertyRequestService
             throw AuthorizationFailedException::forbidden();
         }
 
-        if ($propertyRequest->status !== 'pending') {
-            abort(409, 'This request has already been responded to.');
+        if ($propertyRequest->status === 'pending_lawyer_review') {
+            abort(409, 'This request has already been forwarded to a lawyer.');
         }
 
-        if ($propertyRequest->lawyer_id !== null) {
-            abort(409, 'This request has already been forwarded to a lawyer.');
+        if ($propertyRequest->status !== 'pending') {
+            abort(409, 'This request has already been responded to.');
         }
 
         $isVerifiedLawyer = DB::table('lawyer_credentials')
@@ -125,7 +128,10 @@ class PropertyRequestService
             abort(422, 'The selected lawyer is not a verified lawyer.');
         }
 
-        $propertyRequest->forceFill(['lawyer_id' => $lawyerId])->save();
+        $propertyRequest->forceFill([
+            'status' => 'pending_lawyer_review',
+            'lawyer_id' => $lawyerId,
+        ])->save();
 
         return $propertyRequest;
     }
