@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\Admin\IdentityDocumentController as AdminIdentityDocumentController;
+use App\Http\Controllers\Admin\LawyerCredentialController as AdminLawyerCredentialController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Kyc\IdentityDocumentController as KycIdentityDocumentController;
+use App\Http\Controllers\Lawyer\LawyerCredentialController;
 use App\Http\Controllers\Profile\ProfileController;
 use App\Http\Controllers\Property\PropertyController;
 use App\Http\Controllers\Property\PropertyRatingController;
@@ -19,8 +21,6 @@ Route::prefix('v1/auth')->group(function () {
     Route::get('me', [AuthController::class, 'me'])->middleware('auth.jwt');
 });
 
-Route::get('/user', [AuthController::class, 'me'])->middleware('auth.jwt');
-
 // UC-040 step 1: name, nationality and signature must be on the profile
 // before the KYC upload below will accept anything.
 Route::prefix('v1/profile')->middleware('auth.jwt')->group(function () {
@@ -34,13 +34,26 @@ Route::prefix('v1/kyc')->middleware('auth.jwt')->group(function () {
     Route::get('status', [KycIdentityDocumentController::class, 'status']); // this is for test
 });
 
+// FR-13.5: a lawyer registers through the same OTP flow as everyone else
+// (registering with role=lawyer), verifies their identity via /v1/kyc like
+// anyone else, and then proves the licence here. Submitting requires an
+// approved ID; reading status never does, so a half-onboarded lawyer can
+// always see where they stand.
+Route::prefix('v1/lawyer')->middleware('auth.jwt')->group(function () {
+    Route::post('credentials', [LawyerCredentialController::class, 'store'])->middleware('kyc.verified');
+    Route::get('credentials/status', [LawyerCredentialController::class, 'status']);
+});
+
 // User endpoints
 Route::get('v1/properties/search', [PropertyController::class, 'search']);
 
 Route::get('v1/properties/home', [PropertyController::class, 'home']);
 
 // FR-3.x: an owner submits a listing, which starts under review.
-Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified'])->group(function () {
+// lawyer.approved is a no-op for ordinary users and blocks lawyer-type
+// accounts whose licence an admin hasn't approved yet — it belongs on every
+// transacting group, alongside kyc.verified.
+Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified', 'lawyer.approved'])->group(function () {
 
     // Owner endpoints
     Route::get('/my-properties', [PropertyController::class, 'index']);
@@ -68,4 +81,14 @@ Route::prefix('v1/admin/kyc')->middleware(['auth.jwt', 'admin'])->name('admin.ky
     Route::get('documents/{identityDocument}/image/{which}', [AdminIdentityDocumentController::class, 'image'])->name('image');
     Route::post('documents/{identityDocument}/approve', [AdminIdentityDocumentController::class, 'approve'])->name('documents.approve');
     Route::post('documents/{identityDocument}/reject', [AdminIdentityDocumentController::class, 'reject'])->name('documents.reject');
+});
+
+// The same review queue shape, for lawyer licences (FR-13.5). Approving here
+// is what makes an account assignable as a lawyer on a property request.
+Route::prefix('v1/admin/lawyers')->middleware(['auth.jwt', 'admin'])->name('admin.lawyers.')->group(function () {
+    Route::get('/', [AdminLawyerCredentialController::class, 'index'])->name('index');
+    Route::get('/{lawyerCredential}', [AdminLawyerCredentialController::class, 'show'])->name('show');
+    Route::get('/{lawyerCredential}/document', [AdminLawyerCredentialController::class, 'document'])->name('document');
+    Route::post('/{lawyerCredential}/approve', [AdminLawyerCredentialController::class, 'approve'])->name('approve');
+    Route::post('/{lawyerCredential}/reject', [AdminLawyerCredentialController::class, 'reject'])->name('reject');
 });

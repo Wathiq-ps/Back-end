@@ -4,6 +4,7 @@ use App\Exceptions\Auth\AuthenticationFailedException;
 use App\Exceptions\Auth\AuthorizationFailedException;
 use App\Exceptions\Kyc\KycConflictException;
 use App\Exceptions\Kyc\ProfileIncompleteException;
+use App\Http\Middleware\EnsureLawyerIsApproved;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserIsVerified;
 use App\Http\Middleware\JwtAuthenticate;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.jwt' => JwtAuthenticate::class,
             'admin' => EnsureUserIsAdmin::class,
             'kyc.verified' => EnsureUserIsVerified::class,
+            'lawyer.approved' => EnsureLawyerIsApproved::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -38,6 +38,20 @@ class AuthorizationFailedException extends Exception
         );
     }
 
+    /**
+     * FR-13.5: a lawyer-type account is inert until an admin has approved the
+     * licence it uploaded — distinct from kycRequired(), which is about
+     * identity and applies to everyone.
+     */
+    public static function lawyerApprovalRequired(): self
+    {
+        return new self(
+            'Your lawyer credentials must be approved by an administrator before you can do this.',
+            'lawyer_approval_required',
+            403,
+        );
+    }
+
     public function render(Request $request): JsonResponse
     {
         return response()->json([

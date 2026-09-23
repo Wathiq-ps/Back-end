@@ -47,7 +47,19 @@ class LawyerSeeder extends Seeder
 
         User::updateOrCreate(
             ['email' => self::EMAIL],
-            ['name' => 'Test Lawyer', 'status' => 'active', 'locale' => 'ar', 'email_verified_at' => now()],
+            [
+                'name' => 'Test Lawyer',
+                'status' => 'active',
+                'locale' => 'ar',
+                'email_verified_at' => now(),
+                // A lawyer clears identity KYC like everyone else, and KYC
+                // needs a complete profile — without these the account 403s
+                // on kyc.verified and isn't actually usable.
+                'nationality' => 'Palestinian',
+                'document_type' => 'national_id',
+                'document_number' => 'TESTLAWYER1',
+                'signature_path' => 'signatures/test-lawyer.png',
+            ],
         );
 
         // Re-fetch rather than trust the model returned above: when this
@@ -62,6 +74,10 @@ class LawyerSeeder extends Seeder
             ['status' => 'active'],
         );
 
+        // status and verified_at have to move together —
+        // lawyer_credentials_verified_when_approved rejects the row otherwise.
+        // This skips the real review flow (Lawyer\LawyerCredentialController →
+        // Admin\LawyerCredentialController) on purpose: it's a fixture.
         DB::table('lawyer_credentials')->upsert(
             [[
                 'user_id' => $user->id,
@@ -69,14 +85,42 @@ class LawyerSeeder extends Seeder
                 'bar_association' => 'Palestine Bar Association',
                 'jurisdiction_id' => $jurisdictionId,
                 'issued_at' => now()->subYears(3)->toDateString(),
+                'status' => 'approved',
                 'verified_at' => now(),
+                'reviewed_at' => now(),
                 'document_path' => "lawyers/{$user->id}/license.pdf",
                 'created_at' => now(),
                 'updated_at' => now(),
             ]],
             ['user_id'],
-            ['bar_association', 'jurisdiction_id', 'issued_at', 'verified_at', 'document_path', 'updated_at'],
+            ['bar_association', 'jurisdiction_id', 'issued_at', 'status', 'verified_at', 'reviewed_at', 'document_path', 'updated_at'],
         );
+
+        // Identity KYC, approved. The lawyer routes gate on kyc.verified, so
+        // a fixture without this can't reach them. Also skips the real flow
+        // (Kyc\IdentityDocumentController → Admin\IdentityDocumentController)
+        // on purpose.
+        $hasApprovedId = DB::table('identity_documents')
+            ->where('user_id', $user->id)
+            ->where('status', 'approved')
+            ->exists();
+
+        if (! $hasApprovedId) {
+            DB::table('identity_documents')->insert([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $tenant->id,
+                'user_id' => $user->id,
+                'type' => $user->document_type,
+                'document_number' => $user->document_number,
+                'front_path' => "kyc/{$user->id}/front.jpg",
+                'selfie_path' => "kyc/{$user->id}/selfie.jpg",
+                'status' => 'approved',
+                'reviewed_by' => $user->id,
+                'reviewed_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
 
         $this->command?->info("Verified lawyer ready: {$user->email} ({$user->id})");
     }

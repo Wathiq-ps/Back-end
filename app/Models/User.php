@@ -68,6 +68,31 @@ class User extends Authenticatable
         return $this->identityDocuments()->where('status', 'approved')->exists();
     }
 
+    public function lawyerCredential()
+    {
+        return $this->hasOne(LawyerCredential::class);
+    }
+
+    /**
+     * The role chosen at registration — what this account signed up as, not
+     * what it is cleared to do. A lawyer account is still unapproved until
+     * isVerifiedLawyer().
+     */
+    public function isLawyer(): bool
+    {
+        return $this->hasRole('lawyer');
+    }
+
+    /**
+     * An admin approved this account's licence (FR-13.5) — the gate on being
+     * assignable to a contract, see PropertyRequestService::accept(), and on
+     * a lawyer-type account doing anything at all, see EnsureLawyerIsApproved.
+     */
+    public function isVerifiedLawyer(): bool
+    {
+        return $this->lawyerCredential()->where('status', 'approved')->exists();
+    }
+
     /**
      * The profile fields a user must fill in before they are allowed to
      * submit identity documents. Returned as a list so the API can tell the

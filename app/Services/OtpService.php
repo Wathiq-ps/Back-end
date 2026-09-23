@@ -25,17 +25,23 @@ class OtpService
     private const CHANNEL = 'email';
 
     /**
-     * Every self-registered user starts with this single role in the MVP's
-     * one tenant — there is no admin/owner/beneficiary distinction to
-     * choose at sign-up (see UC-037/UC-038 note above). Admin is never
+     * A self-registered account gets exactly one role in the MVP's one
+     * tenant, chosen at sign-up: 'user' (owner and beneficiary both — there
+     * is no separate account type for each) or 'lawyer'. Admin is never
      * granted here; it stays a manual grant via `user:make-admin`.
+     *
+     * The 'lawyer' role says what the account signed up as, not what it may
+     * do — it stays inert until an admin approves the licence, see
+     * EnsureLawyerIsApproved.
      */
     private const DEFAULT_ROLE = 'user';
+
+    private const SELF_SERVICE_ROLES = ['user', 'lawyer'];
 
     /**
      * @throws AuthenticationFailedException
      */
-    public function requestForEmail(string $email, string $status, ?string $ip): User
+    public function requestForEmail(string $email, string $status, ?string $ip, ?string $role = null): User
     {
         $email = mb_strtolower(trim($email));
 
@@ -62,7 +68,7 @@ class OtpService
                 'locale' => app()->getLocale() === 'ar' ? 'ar' : 'en',
             ]);
 
-            $this->grantDefaultRole($user);
+            $this->grantRole($user, $role);
         }
 
         $this->assertNotLocked($user);
@@ -158,20 +164,24 @@ class OtpService
         return $user;
     }
 
-    private function grantDefaultRole(User $user): void
+    private function grantRole(User $user, ?string $roleCode): void
     {
+        // Belt and braces over RequestOtpRequest's `in:` rule — this is the
+        // one place a caller could otherwise talk itself into a role.
+        $roleCode = in_array($roleCode, self::SELF_SERVICE_ROLES, true) ? $roleCode : self::DEFAULT_ROLE;
+
         $tenant = Tenant::where('slug', 'default')->first();
 
         if (! $tenant) {
-            report(new \RuntimeException('No "default" tenant found; cannot grant default role to new user '.$user->id));
+            report(new \RuntimeException('No "default" tenant found; cannot grant a role to new user '.$user->id));
 
             return;
         }
 
-        $role = Role::where('code', self::DEFAULT_ROLE)->first();
+        $role = Role::where('code', $roleCode)->first();
 
         if (! $role) {
-            report(new \RuntimeException('No "'.self::DEFAULT_ROLE.'" role found; cannot grant it to new user '.$user->id));
+            report(new \RuntimeException('No "'.$roleCode.'" role found; cannot grant it to new user '.$user->id));
 
             return;
         }

@@ -30,6 +30,7 @@ class AuthController extends Controller
             $request->validated('email'),
             $request->validated('status'),
             $request->ip(),
+            $request->validated('role'),
         );
 
         return response()->json([

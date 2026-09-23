@@ -19,6 +19,9 @@ class UserResource extends JsonResource
             'document_number' => $this->document_number,
             'date_of_birth' => $this->date_of_birth?->toDateString(),
             'status' => $this->status,
+            // Only meaningful for a lawyer account: false means every
+            // transacting route will 403 until an admin approves the licence.
+            'lawyer_verified' => $this->when($this->isLawyer(), fn () => $this->isVerifiedLawyer()),
             'locale' => $this->locale,
             'email_verified_at' => $this->email_verified_at,
             'phone_verified_at' => $this->phone_verified_at,
@@ -32,10 +35,10 @@ class UserResource extends JsonResource
     }
 
     /**
-     * A user can hold more than one active membership row (e.g. `admin` is
-     * granted on top of the base `user` role, never in place of it), but
-     * with only two role codes in play there's always one meaningful
-     * answer to "what is this user" — prefer `admin` when present.
+     * A user can hold more than one active membership row — `admin` and
+     * `lawyer` are both granted on top of the base `user` role, never in
+     * place of it — so "what is this user" needs a fixed precedence rather
+     * than whichever row the query happened to return first.
      */
     private function resolveRole(): ?string
     {
@@ -45,6 +48,12 @@ class UserResource extends JsonResource
             ->get()
             ->pluck('role.code');
 
-        return $codes->contains('admin') ? 'admin' : $codes->first();
+        foreach (['admin', 'lawyer'] as $privileged) {
+            if ($codes->contains($privileged)) {
+                return $privileged;
+            }
+        }
+
+        return $codes->first();
     }
 }
