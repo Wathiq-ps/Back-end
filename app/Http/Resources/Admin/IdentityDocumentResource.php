@@ -17,6 +17,7 @@ class IdentityDocumentResource extends JsonResource
             'id' => $this->id,
             'user' => [
                 'id' => $this->user?->id,
+                'name' => $this->user?->name,
                 'email' => $this->user?->email,
                 'phone' => $this->user?->phone,
             ],
