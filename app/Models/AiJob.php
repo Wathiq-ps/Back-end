@@ -28,7 +28,8 @@ class AiJob extends Model
     protected $fillable = [
         'id', 'tenant_id', 'contract_id', 'contract_version_id', 'kind', 'status', 'requested_by',
         'provider', 'model_id', 'model_version', 'prompt_version', 'kb_version_id', 'input_hash',
-        'latency_ms', 'attempts', 'error_code', 'error_message', 'result', 'dispatched_at', 'completed_at',
+        'latency_ms', 'tokens_input', 'tokens_output', 'attempts', 'error_code', 'error_message', 'result',
+        'dispatched_at', 'completed_at',
     ];
 
     protected function casts(): array
