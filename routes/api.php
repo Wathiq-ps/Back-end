@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\LawyerCredentialController as AdminLawyerCredenti
 use App\Http\Controllers\Ai\AiCallbackController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Contract\ContractController;
+use App\Http\Controllers\Contract\ContractReviewController;
 use App\Http\Controllers\Kyc\IdentityDocumentController as KycIdentityDocumentController;
 use App\Http\Controllers\Lawyer\LawyerCredentialController;
 use App\Http\Controllers\Lawyer\PropertyRequestController as LawyerPropertyRequestController;
@@ -92,6 +93,11 @@ Route::prefix('v1/contracts')->middleware(['auth.jwt', 'kyc.verified', 'lawyer.a
     Route::get('/{contract}', [ContractController::class, 'show'])->whereUuid('contract');
     Route::post('/{contract}/analysis', [ContractController::class, 'submitForAnalysis'])->whereUuid('contract');
     Route::post('/{contract}/generation', [ContractController::class, 'retryGeneration'])->whereUuid('contract');
+    // The assigned lawyer's review (M4).
+    Route::patch('/{contract}/findings/{finding}', [ContractReviewController::class, 'resolveFinding'])->whereUuid(['contract', 'finding']);
+    Route::post('/{contract}/versions', [ContractReviewController::class, 'storeVersion'])->whereUuid('contract');
+    Route::post('/{contract}/approval', [ContractReviewController::class, 'approve'])->whereUuid('contract');
+    Route::post('/{contract}/modification-request', [ContractReviewController::class, 'requestModification'])->whereUuid('contract');
 });
 
 // Results from the AI service. No JWT — the HMAC signature is the auth
