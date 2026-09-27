@@ -2,9 +2,12 @@
 
 use App\Http\Controllers\Admin\IdentityDocumentController as AdminIdentityDocumentController;
 use App\Http\Controllers\Admin\LawyerCredentialController as AdminLawyerCredentialController;
+use App\Http\Controllers\Ai\AiCallbackController;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Contract\ContractController;
 use App\Http\Controllers\Kyc\IdentityDocumentController as KycIdentityDocumentController;
 use App\Http\Controllers\Lawyer\LawyerCredentialController;
+use App\Http\Controllers\Lawyer\PropertyRequestController as LawyerPropertyRequestController;
 use App\Http\Controllers\Profile\ProfileController;
 use App\Http\Controllers\Property\PropertyController;
 use App\Http\Controllers\Property\PropertyRatingController;
@@ -73,6 +76,27 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified', 'lawyer.
     Route::post('/{id}/requests', [PropertyRequestController::class, 'store']);
     Route::get('/my-requests', [PropertyRequestController::class, 'mine']);
 });
+
+// The assigned lawyer decides a request the owner forwarded to them.
+// Accepting it creates the contract and has the AI draft it.
+Route::prefix('v1/lawyer/requests')->middleware(['auth.jwt', 'kyc.verified', 'lawyer.approved'])->group(function () {
+    Route::get('/', [LawyerPropertyRequestController::class, 'index']);
+    Route::patch('/{propertyRequest}/accept', [LawyerPropertyRequestController::class, 'accept'])->whereUuid('propertyRequest');
+    Route::patch('/{propertyRequest}/reject', [LawyerPropertyRequestController::class, 'reject'])->whereUuid('propertyRequest');
+});
+
+// Contracts the caller is a party to. The AI work behind them is async:
+// clients poll the contract and read its ai_job.status.
+Route::prefix('v1/contracts')->middleware(['auth.jwt', 'kyc.verified', 'lawyer.approved'])->group(function () {
+    Route::get('/', [ContractController::class, 'index']);
+    Route::get('/{contract}', [ContractController::class, 'show'])->whereUuid('contract');
+    Route::post('/{contract}/analysis', [ContractController::class, 'submitForAnalysis'])->whereUuid('contract');
+    Route::post('/{contract}/generation', [ContractController::class, 'retryGeneration'])->whereUuid('contract');
+});
+
+// Results from the AI service. No JWT — the HMAC signature is the auth
+// (see AiCallbackController).
+Route::post('v1/ai/callback', AiCallbackController::class)->middleware('throttle:120,1');
 
 // UC-031/032-style admin review queue for KYC submissions.
 Route::prefix('v1/admin/kyc')->middleware(['auth.jwt', 'admin'])->name('admin.kyc.')->group(function () {

@@ -32,6 +32,14 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // The Wathiq AI service (Wathiq-ps/Ai). Jobs go to `url` over Railway's
+    // private network (http://ai.railway.internal:8001), with no auth header;
+    // results come back to /api/v1/ai/callback signed with `webhook_secret`.
+    'ai' => [
+        'url' => env('AI_SERVICE_URL'),
+        'webhook_secret' => env('AI_WEBHOOK_SECRET'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

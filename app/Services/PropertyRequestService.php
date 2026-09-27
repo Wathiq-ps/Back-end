@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\Auth\AuthorizationFailedException;
 use App\Exceptions\Property\PropertyConflictException;
 use App\Exceptions\Property\PropertyRequestNotAllowedException;
+use App\Models\Contract;
 use App\Models\Property;
 use App\Models\PropertyRequest;
 use App\Models\Tenant;
@@ -21,6 +22,8 @@ use Illuminate\Support\Str;
  */
 class PropertyRequestService
 {
+    public function __construct(private readonly ContractService $contracts) {}
+
     public function submit(User $requester, string $propertyId, array $data): PropertyRequest
     {
         $tenantId = Tenant::where('slug', 'default')->value('id');
@@ -134,6 +137,64 @@ class PropertyRequestService
         ])->save();
 
         return $propertyRequest;
+    }
+
+    /**
+     * The assigned lawyer takes the request on. This is what decides it: the
+     * request is accepted, the property leaves the market, and the contract
+     * is created and handed to the AI for drafting — all or nothing.
+     */
+    public function lawyerAccept(User $lawyer, PropertyRequest $propertyRequest): Contract
+    {
+        $this->assertAwaitingLawyer($lawyer, $propertyRequest);
+
+        // requests_one_accepted_per_property would refuse this anyway; checking
+        // first makes it a 409 instead of a constraint-violation 500.
+        $alreadyAccepted = PropertyRequest::where('property_id', $propertyRequest->property_id)
+            ->where('status', 'accepted')
+            ->exists();
+
+        if ($alreadyAccepted) {
+            abort(409, 'Another request on this property has already been accepted.');
+        }
+
+        return DB::transaction(function () use ($lawyer, $propertyRequest) {
+            $propertyRequest->forceFill([
+                'status' => 'accepted',
+                'responded_by' => $lawyer->id,
+                'responded_at' => now(),
+            ])->save();
+
+            $propertyRequest->property->forceFill(['status' => 'under_contract'])->save();
+
+            return $this->contracts->createFromRequest($lawyer, $propertyRequest);
+        });
+    }
+
+    /** The assigned lawyer turns the request down. Final, with a reason. */
+    public function lawyerReject(User $lawyer, PropertyRequest $propertyRequest, string $reason): PropertyRequest
+    {
+        $this->assertAwaitingLawyer($lawyer, $propertyRequest);
+
+        $propertyRequest->forceFill([
+            'status' => 'rejected',
+            'responded_by' => $lawyer->id,
+            'responded_at' => now(),
+            'response_note' => $reason,
+        ])->save();
+
+        return $propertyRequest;
+    }
+
+    private function assertAwaitingLawyer(User $lawyer, PropertyRequest $propertyRequest): void
+    {
+        if ($propertyRequest->lawyer_id !== $lawyer->id) {
+            throw AuthorizationFailedException::forbidden();
+        }
+
+        if ($propertyRequest->status !== 'pending_lawyer_review') {
+            abort(409, 'This request is not waiting for your decision.');
+        }
     }
 
     private function generateReference(string $tenantId): string
