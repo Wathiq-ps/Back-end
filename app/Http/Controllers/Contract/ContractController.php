@@ -51,7 +51,7 @@ class ContractController extends Controller
         // The analysis is the lawyer's working material: its risk score swings
         // between runs, so it is not shown to the parties as a verdict.
         if ($contract->lawyer_id === $request->user()->id) {
-            $contract->load('currentAnalysis.findings');
+            $contract->load('latestAnalysis.findings');
         }
 
         return response()->json(['data' => new ContractResource($contract)]);

@@ -20,6 +20,7 @@ class AnalysisFinding extends Model
     protected $fillable = [
         'id', 'tenant_id', 'analysis_id', 'clause_id', 'clause_kind', 'kind', 'severity', 'title_ar',
         'title_en', 'description', 'suggested_text', 'citations', 'confidence', 'resolution',
+        'resolved_by', 'resolved_at', 'resolution_note',
     ];
 
     protected function casts(): array
