@@ -517,6 +517,12 @@ test('a rent draft carrying the lease mechanics is stored clause by clause', fun
         ->and($kinds)->toContain('deposit', 'utilities', 'maintenance', 'handover', 'inspection');
 });
 
+test('the clause kinds the callback accepts are exactly the app.clause_kind enum', function () {
+    $enum = DB::select('select unnest(enum_range(null::app.clause_kind))::text as kind');
+
+    expect(array_column($enum, 'kind'))->toBe(WireContract::CLAUSE_KINDS);
+});
+
 test('a callback that breaks the wire contract fails the job with the reason, not a 500', function () {
     $contract = acceptedContract();
     $job = $contract->aiJobs()->firstOrFail();
