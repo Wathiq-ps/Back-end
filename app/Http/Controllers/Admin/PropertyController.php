@@ -102,7 +102,7 @@ class PropertyController extends Controller
         }
 
         if ($reference = $request->query('reference')) {
-            $query->where('reference', 'ilike', $reference . '%');
+            $query->where('reference', 'ilike', $reference.'%');
         }
 
         $properties = $query->paginate(self::PER_PAGE);
