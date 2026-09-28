@@ -16,6 +16,12 @@ return [
     'name' => env('APP_NAME', 'Laravel'),
 
     /*
+    | The jurisdiction (app.jurisdictions.code) the MVP serves: contracts,
+    | lawyer licences and the AI's knowledge base are all keyed on it.
+    */
+    'jurisdiction' => env('APP_JURISDICTION', 'PS'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------

@@ -7,6 +7,7 @@ use App\Models\AiJob;
 use App\Models\Contract;
 use App\Models\PropertyRequest;
 use App\Models\User;
+use App\Support\Jurisdiction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -27,7 +28,7 @@ class ContractService
     public function createFromRequest(User $lawyer, PropertyRequest $request): Contract
     {
         $property = $request->property;
-        $jurisdictionId = DB::table('jurisdictions')->value('id');
+        $jurisdictionId = Jurisdiction::defaultId();
         abort_if(! $jurisdictionId, 500, 'No jurisdiction configured.');
 
         $contract = Contract::create([

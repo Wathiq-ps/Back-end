@@ -5,8 +5,8 @@ namespace App\Services;
 use App\Exceptions\Lawyer\LawyerCredentialConflictException;
 use App\Models\LawyerCredential;
 use App\Models\User;
+use App\Support\Jurisdiction;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -35,7 +35,7 @@ class LawyerCredentialService
             throw LawyerCredentialConflictException::reviewPending();
         }
 
-        $jurisdictionId = DB::table('jurisdictions')->value('id');
+        $jurisdictionId = Jurisdiction::defaultId();
         abort_if(! $jurisdictionId, 500, 'No jurisdiction configured.');
 
         // lawyer_credentials_license_key makes this unique per jurisdiction;
