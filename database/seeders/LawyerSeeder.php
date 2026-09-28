@@ -6,6 +6,7 @@ use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\TenantMembership;
 use App\Models\User;
+use App\Support\Jurisdiction;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -39,7 +40,7 @@ class LawyerSeeder extends Seeder
             throw new RuntimeException('No "lawyer" role found. Has the roles migration / RoleSeeder run?');
         }
 
-        $jurisdictionId = DB::table('jurisdictions')->value('id');
+        $jurisdictionId = Jurisdiction::defaultId();
 
         if (! $jurisdictionId) {
             throw new RuntimeException('No jurisdiction found. Run JurisdictionSeeder first.');
