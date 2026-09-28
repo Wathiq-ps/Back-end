@@ -132,33 +132,29 @@ class AiJobService
     private function storeDraft(AiJob $job, array $result): void
     {
         $contract = $job->contract;
-        $hash = hash('sha256', $result['body']);
 
-        // The AI service caches identical requests, so a retried draft can
-        // come back byte-identical — and contract_versions_hash_key allows one
-        // row per body. Reuse that version instead of failing on it.
-        $version = $contract->versions()->where('content_hash', $hash)->first();
+        // A draft is only ever generated for a contract with no version yet
+        // (the first draft, or retryGeneration after a failed one), so this is
+        // always version 1. The AI keeps no cache of past drafts any more, so
+        // a retry is a fresh draft, never a byte-identical one to reuse.
+        $version = $contract->versions()->create([
+            'tenant_id' => $contract->tenant_id,
+            'version_no' => (int) $contract->versions()->max('version_no') + 1,
+            'body' => $result['body'],
+            'body_format' => 'plain',
+            'content_hash' => hash('sha256', $result['body']),
+            'author_type' => 'ai',
+            'ai_job_id' => $job->id,
+        ]);
 
-        if (! $version) {
-            $version = $contract->versions()->create([
+        foreach ($result['clauses'] as $i => $clause) {
+            $version->clauses()->create([
                 'tenant_id' => $contract->tenant_id,
-                'version_no' => (int) $contract->versions()->max('version_no') + 1,
-                'body' => $result['body'],
-                'body_format' => 'plain',
-                'content_hash' => $hash,
-                'author_type' => 'ai',
-                'ai_job_id' => $job->id,
+                'ordinal' => $i + 1,
+                'kind' => $clause['clause_kind'],
+                'body' => $clause['content'],
+                'is_ai_generated' => true,
             ]);
-
-            foreach ($result['clauses'] as $i => $clause) {
-                $version->clauses()->create([
-                    'tenant_id' => $contract->tenant_id,
-                    'ordinal' => $i + 1,
-                    'kind' => $clause['clause_kind'],
-                    'body' => $clause['content'],
-                    'is_ai_generated' => true,
-                ]);
-            }
         }
 
         $contract->update(['current_version_id' => $version->id]);
