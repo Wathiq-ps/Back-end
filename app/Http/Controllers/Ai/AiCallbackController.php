@@ -61,7 +61,7 @@ class AiCallbackController extends Controller
             $job = AiJob::whereKey($data['job_id'])->lockForUpdate()->first();
             abort_unless($job, 404, 'Unknown job.');
 
-            if (! in_array($job->status, AiJob::IN_FLIGHT, true)) {
+            if (! in_array($job->status, AiJob::IN_FLIGHT, true) && ! $ai->acceptsLate($job, $data)) {
                 return [];
             }
 

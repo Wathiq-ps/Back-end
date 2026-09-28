@@ -62,8 +62,26 @@ class AiJobService
     }
 
     /**
-     * A result arrived for a job that is still in flight (the callback
-     * controller has already checked that, under a row lock).
+     * A paid success that arrived after we gave up waiting — no callback in
+     * time, or the dispatch retries ran out while the AI had in fact accepted
+     * the job. It is still the answer, unless a newer job for the same
+     * contract has replaced this one (the lawyer retried).
+     */
+    public function acceptsLate(AiJob $job, array $callback): bool
+    {
+        return ($callback['status'] ?? null) === 'succeeded'
+            && in_array($job->error_code, ['no_callback', 'dispatch_failed'], true)
+            && ! AiJob::where('contract_id', $job->contract_id)
+                ->where('kind', $job->kind)
+                ->whereKeyNot($job->id)
+                ->where('queued_at', '>', $job->queued_at)
+                ->exists();
+    }
+
+    /**
+     * A result arrived for a job that is still in flight, or a late success
+     * acceptsLate() let through (the callback controller has already checked,
+     * under a row lock).
      */
     public function apply(AiJob $job, array $callback): void
     {
@@ -96,6 +114,9 @@ class AiJobService
             'prompt_version' => $provenance['prompt_version'],
             'kb_version_id' => $provenance['kb_version_id'],
             'result' => $callback['result'],
+            // A late success replaces the no_callback / dispatch_failed verdict.
+            'error_code' => null,
+            'error_message' => null,
             ...$tokens,
             'completed_at' => now(),
             'latency_ms' => $job->dispatched_at ? (int) $job->dispatched_at->diffInMilliseconds(now()) : null,
@@ -197,6 +218,12 @@ class AiJobService
             ]);
         }
 
+        // A late analysis finds the contract back in draft (the no-callback
+        // failure returned it there). If the analysed version is still the
+        // current one it moves on, through the transitions the contract
+        // state machine allows: draft -> under_ai_review -> pending_lawyer_review.
+        Contract::whereKey($job->contract_id)->where('status', 'draft')
+            ->where('current_version_id', $version->id)->update(['status' => 'under_ai_review']);
         Contract::whereKey($job->contract_id)->where('status', 'under_ai_review')->update(['status' => 'pending_lawyer_review']);
     }
 

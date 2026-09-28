@@ -15,6 +15,8 @@ use Database\Seeders\LawyerSeeder;
 use Database\Seeders\TenantSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -381,7 +383,8 @@ test('a job with no callback times out, but a finished one is left alone', funct
     $job = $contract->aiJobs()->firstOrFail();
 
     (new CheckAiJobTimeout($job->id))->handle(app(AiJobService::class));
-    expect($job->fresh()->status)->toBe('timed_out')->and($job->fresh()->error_code)->toBe('no_callback');
+    // failed, not timed_out: timed_out is the AI's own verdict on its budget.
+    expect($job->fresh()->status)->toBe('failed')->and($job->fresh()->error_code)->toBe('no_callback');
 
     AiJob::whereKey($job->id)->update(['status' => 'running', 'error_code' => null, 'completed_at' => null]);
     postCallback(callback($job, 'succeeded', draftResult()))->assertNoContent();
@@ -567,4 +570,80 @@ test('an analysis must stay inside the wire contract too', function () {
     postCallback(callback($job, 'succeeded', $result))->assertStatus(422);
     expect($job->fresh()->error_code)->toBe('contract_violation')
         ->and($contract->fresh()->status)->toBe('draft');
+});
+
+test('the no-callback check follows the deadline the AI states', function () {
+    $this->patchJson("/api/v1/lawyer/requests/{$this->request->id}/accept", [], actingAsUser($this->lawyer));
+    $job = AiJob::firstOrFail();
+    Http::fake(['ai.test/*' => Http::response(['job_id' => $job->id, 'status' => 'running', 'respond_within_seconds' => 107], 202)]);
+
+    (new SendAiJob($job->id))->handle(app(AiJobService::class));
+
+    Queue::assertPushed(CheckAiJobTimeout::class, fn ($check) => $check->afterSeconds === 107 + SendAiJob::CALLBACK_SLACK_SECONDS);
+});
+
+test('an AI that states no deadline gets the old three minutes', function () {
+    $this->patchJson("/api/v1/lawyer/requests/{$this->request->id}/accept", [], actingAsUser($this->lawyer));
+    $job = AiJob::firstOrFail();
+    Http::fake(['ai.test/*' => Http::response(['job_id' => $job->id, 'status' => 'running'], 202)]);
+
+    (new SendAiJob($job->id))->handle(app(AiJobService::class));
+
+    Queue::assertPushed(CheckAiJobTimeout::class, fn ($check) => $check->afterSeconds === SendAiJob::FALLBACK_DEADLINE_SECONDS);
+});
+
+test('a 4xx that is not the AI refusing the job is retried, not recorded as a refusal', function () {
+    $this->patchJson("/api/v1/lawyer/requests/{$this->request->id}/accept", [], actingAsUser($this->lawyer));
+    $job = AiJob::firstOrFail();
+    Http::fake(['ai.test/*' => Http::response('Too Many Requests', 429)]);
+
+    expect(fn () => (new SendAiJob($job->id))->handle(app(AiJobService::class)))
+        ->toThrow(RequestException::class);
+    expect($job->fresh()->status)->toBe('dispatched')->and($job->fresh()->error_code)->toBeNull();
+});
+
+test('a paid draft that arrives after the no-callback check is still stored', function () {
+    $contract = acceptedContract();
+    $job = $contract->aiJobs()->firstOrFail();
+    (new CheckAiJobTimeout($job->id))->handle(app(AiJobService::class));
+
+    postCallback(callback($job, 'succeeded', draftResult()))->assertNoContent();
+
+    $job->refresh();
+    expect($job->status)->toBe('succeeded')
+        ->and($job->error_code)->toBeNull()
+        ->and($contract->fresh()->current_version_id)->not->toBeNull();
+});
+
+test('a late result is dropped once a newer job has replaced it', function () {
+    $contract = acceptedContract();
+    $late = $contract->aiJobs()->firstOrFail();
+    (new CheckAiJobTimeout($late->id))->handle(app(AiJobService::class));
+    $this->travel(1)->seconds();
+    $this->postJson("/api/v1/contracts/{$contract->id}/generation", [], actingAsUser($this->lawyer))->assertAccepted();
+
+    postCallback(callback($late, 'succeeded', draftResult()))->assertNoContent();
+
+    expect($late->fresh()->status)->toBe('failed')
+        ->and($contract->fresh()->current_version_id)->toBeNull();
+});
+
+test('a late analysis still reaches the lawyer when its version is current', function () {
+    $contract = draftedContract();
+    $this->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser($this->lawyer))->assertAccepted();
+    $job = $contract->aiJobs()->where('kind', 'analyze_contract')->firstOrFail();
+    $job->update(['status' => 'running', 'dispatched_at' => now()]);
+    (new CheckAiJobTimeout($job->id))->handle(app(AiJobService::class));
+    expect($contract->fresh()->status)->toBe('draft');
+
+    postCallback(callback($job, 'succeeded', analysisResult()))->assertNoContent();
+
+    expect($contract->fresh()->status)->toBe('pending_lawyer_review')
+        ->and($job->fresh()->status)->toBe('succeeded');
+});
+
+test('the callback route is not rate-limited', function () {
+    $route = app('router')->getRoutes()->match(Request::create('/api/v1/ai/callback', 'POST'));
+
+    expect(collect($route->gatherMiddleware())->filter(fn ($m) => str_starts_with($m, 'throttle')))->toBeEmpty();
 });
