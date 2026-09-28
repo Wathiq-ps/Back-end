@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\IdentityDocumentController as AdminIdentityDocumentController;
 use App\Http\Controllers\Admin\LawyerCredentialController as AdminLawyerCredentialController;
+use App\Http\Controllers\Admin\PropertyController as AdminPropertyController;
 use App\Http\Controllers\Ai\AiCallbackController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Contract\ContractController;
@@ -121,4 +122,23 @@ Route::prefix('v1/admin/lawyers')->middleware(['auth.jwt', 'admin'])->name('admi
     Route::get('/{lawyerCredential}/document', [AdminLawyerCredentialController::class, 'document'])->name('document');
     Route::post('/{lawyerCredential}/approve', [AdminLawyerCredentialController::class, 'approve'])->name('approve');
     Route::post('/{lawyerCredential}/reject', [AdminLawyerCredentialController::class, 'reject'])->name('reject');
+});
+
+// FR-2.2/FR-2.4, UC-004. The same review-queue shape again, for ownership
+// documents — the decision is taken on the *document*, and the parent listing
+// follows from it (OwnershipDocumentService::syncPropertyStatus), which is what
+// finally releases a `pending_verification` property for the owner to publish.
+//
+// The /documents routes are declared before /{property} on purpose: registered
+// the other way round, "documents" would bind as a property id and the queue
+// would 404.
+Route::prefix('v1/admin/properties')->middleware(['auth.jwt', 'admin'])->name('admin.properties.')->group(function () {
+    Route::get('/documents', [AdminPropertyController::class, 'documents'])->name('documents.index');
+    Route::get('/documents/{ownershipDocument}/file', [AdminPropertyController::class, 'documentFile'])->name('documents.file');
+    Route::post('/documents/{ownershipDocument}/approve', [AdminPropertyController::class, 'approve'])->name('documents.approve');
+    Route::post('/documents/{ownershipDocument}/reject', [AdminPropertyController::class, 'reject'])->name('documents.reject');
+
+    Route::get('/', [AdminPropertyController::class, 'index'])->name('index');
+    Route::get('/{property}', [AdminPropertyController::class, 'show'])->name('show');
+    Route::get('/{property}/documents', [AdminPropertyController::class, 'propertyDocuments'])->name('documents.for-property');
 });
