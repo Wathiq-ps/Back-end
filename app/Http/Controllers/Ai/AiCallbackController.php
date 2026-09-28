@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers\Ai;
 
+use App\Ai\WireContract;
 use App\Http\Controllers\Controller;
 use App\Models\AiJob;
 use App\Services\AiJobService;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Where the AI service delivers job results (Wathiq-ps/Ai openapi.yaml,
@@ -17,6 +18,11 @@ use Illuminate\Support\Str;
  * The AI retries a delivery on a network error or 5xx, so the same result can
  * arrive more than once. Applying it is idempotent: the job row is locked and
  * a job that already finished is left alone.
+ *
+ * A callback that doesn't match the wire contract (App\Ai\WireContract) is
+ * answered 422 — which the AI treats as final — and the job fails with
+ * error_code contract_violation and the reasons, instead of a failed insert
+ * turning into a 500, three AI retries and a misleading no_callback timeout.
  */
 class AiCallbackController extends Controller
 {
@@ -29,12 +35,12 @@ class AiCallbackController extends Controller
         $data = json_decode($raw, true);
         abort_unless(
             is_array($data) && Str::isUuid($data['job_id'] ?? null)
-                && in_array($data['status'] ?? null, ['succeeded', 'failed', 'timed_out'], true),
+                && in_array($data['status'] ?? null, WireContract::STATUSES, true),
             422,
             'Malformed callback.',
         );
 
-        DB::transaction(function () use ($data, $raw, $signature, $ai) {
+        $violations = DB::transaction(function () use ($data, $raw, $signature, $ai) {
             // webhook_signature_key accepts a signature once: an exact replay
             // of a captured request inserts nothing and changes nothing.
             $fresh = DB::table('ops.webhook_deliveries')->insertOrIgnore([
@@ -49,18 +55,32 @@ class AiCallbackController extends Controller
             ]);
 
             if (! $fresh) {
-                return;
+                return [];
             }
 
             $job = AiJob::whereKey($data['job_id'])->lockForUpdate()->first();
             abort_unless($job, 404, 'Unknown job.');
 
-            if (in_array($job->status, AiJob::IN_FLIGHT, true)) {
-                $ai->apply($job, $data);
+            if (! in_array($job->status, AiJob::IN_FLIGHT, true)) {
+                return [];
             }
+
+            $violations = WireContract::violations($job, $data);
+            if ($violations) {
+                $ai->fail($job, 'contract_violation', implode(' ', $violations));
+                DB::table('ops.webhook_deliveries')->where('signature', $signature)->update(['http_status' => 422]);
+
+                return $violations;
+            }
+
+            $ai->apply($job, $data);
+
+            return [];
         });
 
-        return response()->noContent();
+        return $violations
+            ? response()->json(['message' => 'The callback does not match the wire contract.', 'errors' => $violations], 422)
+            : response()->noContent();
     }
 
     /**

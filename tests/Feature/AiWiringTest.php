@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\WireContract;
 use App\Jobs\CheckAiJobTimeout;
 use App\Jobs\SendAiJob;
 use App\Models\AiJob;
@@ -34,10 +35,8 @@ if (getenv('DB_CONNECTION') !== 'pgsql') {
 
 uses(RefreshDatabase::class);
 
-const CLAUSE_KINDS = [
-    'parties', 'subject', 'price', 'payment_terms', 'duration', 'obligations',
-    'warranties', 'termination', 'dispute_resolution', 'governing_law', 'other',
-];
+// A rent carries every kind the AI knows, the five lease mechanics included.
+const CLAUSE_KINDS = WireContract::CLAUSE_KINDS;
 
 beforeEach(function () {
     config([
@@ -148,14 +147,14 @@ function callback(AiJob $job, string $status, ?array $result = null, ?string $er
 
 function citation(): array
 {
-    return ['source_id' => (string) Str::uuid(), 'article_ref' => 'المادة (5)', 'chunk_id' => (string) Str::uuid(), 'excerpt' => '...'];
+    return ['chunk_id' => (string) Str::uuid(), 'article_ref' => 'المادة (5)', 'law' => 'قانون المالكين والمستأجرين رقم (62) لسنة 1953'];
 }
 
 function draftResult(): array
 {
-    $clauses = array_map(fn ($kind) => ['clause_kind' => $kind, 'content' => "بند {$kind}"], CLAUSE_KINDS);
+    $clauses = array_map(fn ($kind) => ['clause_kind' => $kind, 'content' => "بند {$kind}", 'citations' => [citation()]], CLAUSE_KINDS);
 
-    return ['body' => implode("\n\n", array_column($clauses, 'content')), 'clauses' => $clauses, 'citations' => [citation()]];
+    return ['body' => implode("\n\n", array_column($clauses, 'content')), 'clauses' => $clauses];
 }
 
 function analysisResult(): array
@@ -174,7 +173,7 @@ function analysisResult(): array
                 'title_en' => 'Conflict', 'description' => 'يخالف المادة (5).', 'suggested_text' => 'نص مقترح', 'citations' => [citation()], 'confidence' => 0.8],
         ],
         'risk_score' => 42,
-        'risk_rubric_version' => 'risk-v2',
+        'risk_rubric_version' => 'risk-v3',
         'summary_ar' => 'ملخص',
         'summary_en' => 'Summary',
         'confidence' => 0.8,
@@ -319,7 +318,7 @@ test('a draft callback stores version 1 with its clauses, exactly once', functio
     expect($job->status)->toBe('succeeded')
         ->and($job->model_version)->toBe('deepseek-chat')
         ->and($job->kb_version_id)->toBe($this->kbVersionId)
-        ->and($job->result['citations'])->toHaveCount(1);
+        ->and($job->result['clauses'][0]['citations'])->toHaveCount(1);
 });
 
 test('an analysis of the current version reaches the lawyer, not the parties', function () {
@@ -340,7 +339,7 @@ test('an analysis of the current version reaches the lawyer, not the parties', f
     $analysis = $this->getJson("/api/v1/contracts/{$contract->id}", actingAsUser($this->lawyer))
         ->assertOk()
         ->assertJsonPath('data.analysis.risk_band', 'medium')
-        ->assertJsonCount(11, 'data.analysis.coverage')
+        ->assertJsonCount(count(CLAUSE_KINDS), 'data.analysis.coverage')
         ->json('data.analysis');
 
     $findings = collect($analysis['findings'])->keyBy('clause_kind');
@@ -459,7 +458,7 @@ test('an edit makes a new lawyer version and supersedes the findings still open'
 
     $v2 = $contract->fresh()->currentVersion;
     $clauses = $v2->clauses()->orderBy('ordinal')->get();
-    expect($clauses)->toHaveCount(11)
+    expect($clauses)->toHaveCount(count(CLAUSE_KINDS))
         ->and($clauses->firstWhere('kind', 'duration')->is_ai_generated)->toBeFalse()
         ->and($clauses->firstWhere('kind', 'price')->is_ai_generated)->toBeTrue()
         ->and($v2->body)->toBe($clauses->pluck('body')->implode("\n\n"))
@@ -505,4 +504,67 @@ test('a contract sent back keeps its reason, and a new version resubmits it', fu
         ['clauses' => [['ordinal' => $subject->ordinal, 'body' => 'الشقة في القطعة رقم 45 من الحوض رقم 7.']]], actingAsUser($this->lawyer))
         ->assertCreated()
         ->assertJsonPath('data.status', 'pending_lawyer_review');
+});
+
+test('a rent draft carrying the lease mechanics is stored clause by clause', function () {
+    $contract = draftedContract();
+
+    $kinds = $contract->currentVersion->clauses()->orderBy('ordinal')->pluck('kind')->all();
+    expect($kinds)->toBe(CLAUSE_KINDS)
+        ->and($kinds)->toContain('deposit', 'utilities', 'maintenance', 'handover', 'inspection');
+});
+
+test('the clause kinds the callback accepts are exactly the app.clause_kind enum', function () {
+    $enum = DB::select('select unnest(enum_range(null::app.clause_kind))::text as kind');
+
+    expect(array_column($enum, 'kind'))->toBe(WireContract::CLAUSE_KINDS);
+});
+
+test('a callback that breaks the wire contract fails the job with the reason, not a 500', function () {
+    $contract = acceptedContract();
+    $job = $contract->aiJobs()->firstOrFail();
+    $result = draftResult();
+    $result['clauses'][3]['clause_kind'] = 'penalty';
+
+    postCallback(callback($job, 'succeeded', $result))
+        ->assertStatus(422)
+        ->assertJsonPath('errors.0', fn ($message) => str_contains($message, 'result.clauses.3.clause_kind'));
+
+    $job->refresh();
+    expect($job->status)->toBe('failed')
+        ->and($job->error_code)->toBe('contract_violation')
+        ->and($job->error_message)->toContain('clause_kind')
+        ->and($contract->fresh()->current_version_id)->toBeNull()
+        ->and(DB::table('ops.webhook_deliveries')->where('request_id', $job->id)->value('http_status'))->toBe(422);
+});
+
+test('a success without the provenance ai_jobs requires is a contract violation', function () {
+    $job = acceptedContract()->aiJobs()->firstOrFail();
+    $body = callback($job, 'succeeded', draftResult());
+    $body['provenance']['kb_version_id'] = null;
+
+    postCallback($body)->assertStatus(422);
+    expect($job->fresh()->error_code)->toBe('contract_violation');
+});
+
+test('a callback for another kind of job is refused', function () {
+    $job = acceptedContract()->aiJobs()->firstOrFail();
+    $body = callback($job, 'succeeded', analysisResult());
+    $body['kind'] = 'analyze_contract';
+
+    postCallback($body)->assertStatus(422);
+    expect($job->fresh()->status)->toBe('failed');
+});
+
+test('an analysis must stay inside the wire contract too', function () {
+    $contract = draftedContract();
+    test()->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser(test()->lawyer))->assertAccepted();
+    $job = $contract->aiJobs()->where('kind', 'analyze_contract')->firstOrFail();
+    $job->update(['status' => 'running', 'dispatched_at' => now()]);
+    $result = analysisResult();
+    $result['findings'][1]['severity'] = 'catastrophic';
+
+    postCallback(callback($job, 'succeeded', $result))->assertStatus(422);
+    expect($job->fresh()->error_code)->toBe('contract_violation')
+        ->and($contract->fresh()->status)->toBe('draft');
 });
