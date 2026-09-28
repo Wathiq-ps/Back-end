@@ -201,7 +201,7 @@ class PropertyController extends Controller
             ->with(['property.owner', 'uploader', 'reviewer'])
             ->orderBy('created_at');
 
-        match ($status) {
+        $query = match ($status) {
             'queue' => $query->whereIn('status', OwnershipDocumentService::OPEN_STATUSES),
             'all' => null,
             default => $query->where('status', $status),
