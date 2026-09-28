@@ -5,7 +5,8 @@ info:
   description: >
     Wire contract between the Laravel back-end and the AI Legal Engine (FastAPI).
     See AI/WATHIQ_AI_SPRINT_PLAN.md's Phase 0 section for the HMAC callback scheme this implements.
-    POST /v1/jobs carries no auth; it is meant to be reached over the private network only.
+    Both directions are signed with the same X-Wathiq-Signature scheme and the
+    shared AI_WEBHOOK_SECRET: Laravel signs POST /v1/jobs, the AI signs its callbacks.
 
 servers:
   - url: http://localhost:8001
@@ -31,7 +32,12 @@ paths:
   /v1/jobs:
     post:
       summary: Enqueue an AI job (Laravel → AI service)
-      security: []
+      description: >
+        Signed by Laravel over the exact bytes it sends (X-Wathiq-Signature,
+        timestamp within 300s either way). Unsigned, mis-signed, altered or
+        stale requests get a 401 and never run.
+      security:
+        - HmacAuth: []
       requestBody:
         required: true
         content:
@@ -45,8 +51,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/JobAccepted"
+        "401":
+          description: Missing, invalid or stale X-Wathiq-Signature
         "422":
-          description: Malformed request, or a kind this service has no worker for
+          description: >-
+            Malformed request, a kind this service has no worker for, or a body
+            over 512 KB (or without a Content-Length)
 
   /api/v1/ai/callback:
     post:
@@ -104,9 +114,17 @@ components:
     GenerateContractPayload:
       type: object
       required: [contract_type, parties, property]
+      description: >-
+        Size limits (app/wire.py): every value inside a party, `property` and
+        `terms` is a single value (no nested objects or arrays) of at most 300
+        characters, each object has at most 20 fields, and there are at most
+        4 parties. A payload over any of them is answered with a signed
+        invalid_payload failure before any law is searched or any LLM called.
+        The whole POST /v1/jobs body is at most 512 KB (422 otherwise).
       properties:
         contract_type:
           type: string
+          maxLength: 32
           description: >-
             Which contract to draft. rent drafts a lease (عقد إيجار); sale
             drafts a sale agreement (اتفاقية بيع) binding the parties to
@@ -117,6 +135,7 @@ components:
             BACKEND_INTEGRATION.md's Failure modes.
         parties:
           type: array
+          maxItems: 4
           description: >-
             For a rent, `role` is landlord or tenant; for a sale, seller or
             buyer (drafted as الطرف الأول and الطرف الثاني). Each identity or
@@ -196,12 +215,15 @@ components:
       properties:
         content:
           type: string
+          maxLength: 60000
           description: >-
-            The contract body as one text. Derived from `clauses` (joined by
+            The contract body as one text (at most 60,000 characters, also when
+            derived from `clauses`). Derived from `clauses` (joined by
             blank lines, in ordinal order) when those are sent.
         clauses:
           type: array
           minItems: 1
+          maxItems: 80
           description: The version's clause rows. Ordinals must be unique.
           items:
             $ref: "#/components/schemas/AnalyzeClause"
@@ -245,6 +267,7 @@ components:
           description: Omit only for a clause of no known kind.
         content:
           type: string
+          maxLength: 10000
 
     ReindexPayload:
       type: object
