@@ -1,0 +1,307 @@
+{
+  "request": {
+    "job_id": "00000000-0000-4000-8000-000000000003",
+    "kind": "analyze_contract",
+    "jurisdiction_id": "00000000-0000-4000-8000-00000000000a",
+    "payload": {
+      "contract_type": "rent",
+      "clauses": [
+        {
+          "ordinal": 1,
+          "clause_kind": "parties",
+          "content": "نص بند parties"
+        },
+        {
+          "ordinal": 2,
+          "clause_kind": "subject",
+          "content": "نص بند subject"
+        },
+        {
+          "ordinal": 3,
+          "clause_kind": "price",
+          "content": "نص بند price"
+        },
+        {
+          "ordinal": 4,
+          "clause_kind": "payment_terms",
+          "content": "نص بند payment_terms"
+        },
+        {
+          "ordinal": 5,
+          "clause_kind": "deposit",
+          "content": "نص بند deposit"
+        },
+        {
+          "ordinal": 6,
+          "clause_kind": "duration",
+          "content": "نص بند duration"
+        },
+        {
+          "ordinal": 7,
+          "clause_kind": "obligations",
+          "content": "نص بند obligations"
+        },
+        {
+          "ordinal": 8,
+          "clause_kind": "utilities",
+          "content": "نص بند utilities"
+        },
+        {
+          "ordinal": 9,
+          "clause_kind": "maintenance",
+          "content": "نص بند maintenance"
+        },
+        {
+          "ordinal": 10,
+          "clause_kind": "handover",
+          "content": "نص بند handover"
+        },
+        {
+          "ordinal": 11,
+          "clause_kind": "inspection",
+          "content": "نص بند inspection"
+        },
+        {
+          "ordinal": 12,
+          "clause_kind": "warranties",
+          "content": "نص بند warranties"
+        },
+        {
+          "ordinal": 13,
+          "clause_kind": "termination",
+          "content": "نص بند termination"
+        },
+        {
+          "ordinal": 14,
+          "clause_kind": "dispute_resolution",
+          "content": "نص بند dispute_resolution"
+        },
+        {
+          "ordinal": 15,
+          "clause_kind": "governing_law",
+          "content": "نص بند governing_law"
+        },
+        {
+          "ordinal": 16,
+          "clause_kind": "other",
+          "content": "نص بند other"
+        }
+      ]
+    }
+  },
+  "accepted": {
+    "job_id": "00000000-0000-4000-8000-000000000003",
+    "status": "running",
+    "respond_within_seconds": 107
+  },
+  "callback": {
+    "job_id": "00000000-0000-4000-8000-000000000003",
+    "kind": "analyze_contract",
+    "status": "succeeded",
+    "result": {
+      "coverage": [
+        {
+          "clause_kind": "parties",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            1
+          ]
+        },
+        {
+          "clause_kind": "subject",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            2
+          ]
+        },
+        {
+          "clause_kind": "price",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            3
+          ]
+        },
+        {
+          "clause_kind": "payment_terms",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            4
+          ]
+        },
+        {
+          "clause_kind": "deposit",
+          "status": "incomplete",
+          "note": "مدة رد التأمين متروكة فراغاً.",
+          "citations": [],
+          "ordinals": [
+            5
+          ]
+        },
+        {
+          "clause_kind": "duration",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            6
+          ]
+        },
+        {
+          "clause_kind": "obligations",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            7
+          ]
+        },
+        {
+          "clause_kind": "utilities",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            8
+          ]
+        },
+        {
+          "clause_kind": "maintenance",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            9
+          ]
+        },
+        {
+          "clause_kind": "handover",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            10
+          ]
+        },
+        {
+          "clause_kind": "inspection",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            11
+          ]
+        },
+        {
+          "clause_kind": "warranties",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            12
+          ]
+        },
+        {
+          "clause_kind": "termination",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ],
+          "ordinals": [
+            13
+          ]
+        },
+        {
+          "clause_kind": "dispute_resolution",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            14
+          ]
+        },
+        {
+          "clause_kind": "governing_law",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            15
+          ]
+        },
+        {
+          "clause_kind": "other",
+          "status": "present",
+          "note": "البند مستوفٍ.",
+          "citations": [],
+          "ordinals": [
+            16
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "kind": "missing_clause",
+          "clause_kind": "deposit",
+          "severity": "low",
+          "title_ar": "بند غير مكتمل: التأمين",
+          "title_en": "Incomplete clause: deposit",
+          "description": "مدة رد التأمين متروكة فراغاً.",
+          "suggested_text": null,
+          "citations": [],
+          "confidence": 1.0,
+          "ordinal": 5
+        },
+        {
+          "kind": "legal_conflict",
+          "clause_kind": "termination",
+          "severity": "high",
+          "title_ar": "مهلة الإنذار غير مذكورة",
+          "title_en": "Notice period not stated",
+          "description": "لا يذكر البند مهلة الثلاثين يوماً التي تشترطها المادة (4).",
+          "suggested_text": "خلال ثلاثين يوماً من تاريخ تبليغه بواسطة الكاتب العدل.",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ],
+          "confidence": 0.9,
+          "ordinal": 13
+        }
+      ],
+      "risk_score": 19,
+      "risk_rubric_version": "risk-v3",
+      "summary_ar": "عقد إيجار شقة سكنية لمدة سنة، مكتمل البنية مع فراغ في مدة رد التأمين.",
+      "summary_en": "A one-year residential lease, complete apart from the deposit refund period.",
+      "confidence": 0.9
+    },
+    "error": null,
+    "error_code": null,
+    "provenance": {
+      "provider": "deepseek",
+      "model_id": "deepseek-flash",
+      "model_version": "deepseek-flash",
+      "prompt_version": "analyze_contract-v3",
+      "kb_version_id": "00000000-0000-4000-8000-00000000000b"
+    },
+    "usage": {
+      "prompt_tokens": 3600,
+      "completion_tokens": 900,
+      "latency_ms": 0
+    }
+  }
+}

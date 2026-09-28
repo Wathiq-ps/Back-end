@@ -712,3 +712,115 @@ test('a version that has been analysed is not analysed again', function () {
 
     $this->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser($this->lawyer))->assertConflict();
 });
+
+/*
+ * Replays of the AI's own recorded exchanges (tests/Contract/ai, synced from
+ * Wathiq-ps/Ai by scripts/sync-ai-contract.sh). The hand-built fixtures above
+ * test our logic; these pin it to what the AI actually sends, so a change on
+ * the AI side fails here once the copy is re-synced.
+ */
+function golden(string $name): array
+{
+    return json_decode(file_get_contents(base_path("tests/Contract/ai/contract/{$name}.json")), true, flags: JSON_THROW_ON_ERROR);
+}
+
+/** The recorded callback, re-addressed to this test's job and knowledge base. */
+function replayed(string $name, AiJob $job): array
+{
+    $callback = golden($name)['callback'];
+    $callback['job_id'] = $job->id;
+    if ($callback['provenance']['kb_version_id'] !== null) {
+        $callback['provenance']['kb_version_id'] = test()->kbVersionId;
+    }
+
+    return $callback;
+}
+
+test('the AI\'s recorded draft is stored clause by clause', function () {
+    $contract = acceptedContract();
+    $callback = replayed('generate_contract.succeeded', $contract->aiJobs()->firstOrFail());
+
+    postCallback($callback)->assertNoContent();
+
+    $version = $contract->fresh()->currentVersion;
+    expect($version->body)->toBe($callback['result']['body'])
+        ->and($version->clauses()->orderBy('ordinal')->pluck('kind')->all())
+        ->toBe(array_column($callback['result']['clauses'], 'clause_kind'));
+});
+
+test('the AI\'s recorded failure fails the job with its code', function () {
+    $contract = acceptedContract();
+    $job = $contract->aiJobs()->firstOrFail();
+
+    postCallback(replayed('generate_contract.failed', $job))->assertNoContent();
+
+    expect($job->fresh()->status)->toBe('failed')
+        ->and($job->fresh()->error_code)->toBe('unsupported_contract_type');
+});
+
+test('the AI\'s recorded analysis lands its findings on the clauses it names', function () {
+    $contract = draftedContract();
+    $this->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser($this->lawyer))->assertAccepted();
+    $job = $contract->aiJobs()->where('kind', 'analyze_contract')->firstOrFail();
+    $job->update(['status' => 'running', 'dispatched_at' => now()]);
+    $callback = replayed('analyze_contract.succeeded', $job);
+
+    postCallback($callback)->assertNoContent();
+
+    $clauses = $contract->fresh()->currentVersion->clauses->keyBy('ordinal');
+    $stored = ContractAnalysis::where('contract_version_id', $contract->current_version_id)->firstOrFail()->findings;
+    foreach ($callback['result']['findings'] as $finding) {
+        expect($stored->firstWhere('kind', $finding['kind'])->clause_id)->toBe($clauses[$finding['ordinal']]->id);
+    }
+});
+
+test('the no-callback check follows the AI\'s recorded 202', function () {
+    $this->patchJson("/api/v1/lawyer/requests/{$this->request->id}/accept", [], actingAsUser($this->lawyer));
+    $job = AiJob::firstOrFail();
+    $accepted = golden('generate_contract.succeeded')['accepted'];
+    Http::fake(['ai.test/*' => Http::response([...$accepted, 'job_id' => $job->id], 202)]);
+
+    (new SendAiJob($job->id))->handle(app(AiJobService::class));
+
+    Queue::assertPushed(CheckAiJobTimeout::class,
+        fn ($check) => $check->afterSeconds === $accepted['respond_within_seconds'] + SendAiJob::CALLBACK_SLACK_SECONDS);
+});
+
+test('every field we send the AI is one its recorded requests use', function () {
+    $contract = draftedContract();
+    $this->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser($this->lawyer))->assertAccepted();
+    $ai = app(AiJobService::class);
+    $draft = $ai->wirePayload($contract->aiJobs()->where('kind', 'generate_contract')->firstOrFail())['payload'];
+    $analysis = $ai->wirePayload($contract->aiJobs()->where('kind', 'analyze_contract')->firstOrFail())['payload'];
+    $goldenDraft = golden('generate_contract.succeeded')['request']['payload'];
+    $goldenAnalysis = golden('analyze_contract.succeeded')['request']['payload'];
+
+    expect(array_diff(array_keys($draft), array_keys($goldenDraft)))->toBe([])
+        ->and(array_diff(array_keys($draft['parties'][0]), array_keys($goldenDraft['parties'][0])))->toBe([])
+        ->and(array_diff(array_keys($draft['terms']), array_keys($goldenDraft['terms'])))->toBe([])
+        // content and contract_version_id ride along for an AI that predates clauses.
+        ->and(array_diff(array_keys($analysis), [...array_keys($goldenAnalysis), 'content', 'contract_version_id']))->toBe([])
+        ->and(array_keys($analysis['clauses'][0]))->toBe(array_keys($goldenAnalysis['clauses'][0]));
+});
+
+test('the hand-built fixtures have the shape the AI actually sends', function () {
+    $keys = fn (array $a) => array_keys($a);
+    $draft = golden('generate_contract.succeeded')['callback'];
+    $analysis = golden('analyze_contract.succeeded')['callback']['result'];
+    $job = new AiJob(['kind' => 'generate_contract']);
+    $job->id = (string) Str::uuid();
+
+    expect(array_diff($keys(callback($job, 'succeeded', draftResult())), $keys($draft)))->toBe([])
+        ->and(array_diff($keys(draftResult()), $keys($draft['result'])))->toBe([])
+        ->and(array_diff($keys(draftResult()['clauses'][0]), $keys($draft['result']['clauses'][0])))->toBe([])
+        ->and(array_diff($keys(citation()), $keys($draft['result']['clauses'][0]['citations'][0])))->toBe([])
+        ->and(array_diff($keys(analysisResult()), $keys($analysis)))->toBe([])
+        ->and(array_diff($keys(analysisResult()['findings'][0]), $keys($analysis['findings'][0])))->toBe([]);
+});
+
+test('our signature check agrees with the AI\'s recorded vector', function () {
+    $vector = golden('hmac');
+
+    expect('t='.$vector['timestamp'].',v1='.hash_hmac('sha256', $vector['timestamp'].'.'.$vector['body'], $vector['secret']))
+        ->toBe($vector['header']);
+});

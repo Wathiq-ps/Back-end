@@ -1,0 +1,72 @@
+{
+  "request": {
+    "job_id": "00000000-0000-4000-8000-000000000002",
+    "kind": "generate_contract",
+    "jurisdiction_id": "00000000-0000-4000-8000-00000000000a",
+    "payload": {
+      "contract_type": "barter",
+      "language": "ar",
+      "parties": [
+        {
+          "role": "landlord",
+          "name": "أحمد خليل",
+          "nationality": "فلسطيني",
+          "document_type": "national_id",
+          "document_number": "401234567",
+          "address": "رام الله، شارع الإرسال"
+        },
+        {
+          "role": "tenant",
+          "name": "سارة يوسف",
+          "nationality": "فلسطينية",
+          "document_type": "national_id",
+          "document_number": "852345678",
+          "address": "نابلس، رفيديا"
+        }
+      ],
+      "property": {
+        "type": "apartment",
+        "city": "رام الله",
+        "district": "الماصيون",
+        "building_number": "12",
+        "area_sqm": "120",
+        "rooms": 3,
+        "floor_number": 2,
+        "is_furnished": false
+      },
+      "terms": {
+        "price": "450",
+        "currency": "JOD",
+        "price_unit": "per_month",
+        "deposit": "900",
+        "starts_on": "2026-11-01",
+        "ends_on": "2027-10-31"
+      }
+    }
+  },
+  "accepted": {
+    "job_id": "00000000-0000-4000-8000-000000000002",
+    "status": "running",
+    "respond_within_seconds": 107
+  },
+  "callback": {
+    "job_id": "00000000-0000-4000-8000-000000000002",
+    "kind": "generate_contract",
+    "status": "failed",
+    "result": null,
+    "error": "drafting a 'barter' contract is not supported yet",
+    "error_code": "unsupported_contract_type",
+    "provenance": {
+      "provider": "deepseek",
+      "model_id": "deepseek-flash",
+      "model_version": "deepseek-flash",
+      "prompt_version": "generate_contract-v6",
+      "kb_version_id": null
+    },
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "latency_ms": 0
+    }
+  }
+}
