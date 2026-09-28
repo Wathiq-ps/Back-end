@@ -52,9 +52,15 @@ class AiJobService
             'jurisdiction_id' => $contract->jurisdiction_id,
             'payload' => match ($job->kind) {
                 'generate_contract' => $this->draftPayload($contract),
+                // The version's clause rows: the AI judges each as the kind it is
+                // and answers each finding with the ordinal of its clause.
+                // `content` is still sent for an AI release that predates it.
                 'analyze_contract' => [
                     'contract_version_id' => $job->contract_version_id,
                     'content' => $job->contractVersion->body,
+                    'clauses' => $job->contractVersion->clauses()->orderBy('ordinal')->get()
+                        ->map(fn ($clause) => ['ordinal' => $clause->ordinal, 'clause_kind' => $clause->kind, 'content' => $clause->body])
+                        ->all(),
                     'contract_type' => $contract->type,
                 ],
             },
@@ -74,7 +80,9 @@ class AiJobService
             && ! AiJob::where('contract_id', $job->contract_id)
                 ->where('kind', $job->kind)
                 ->whereKeyNot($job->id)
-                ->where('queued_at', '>', $job->queued_at)
+                // >=: two jobs queued in one transaction share now(); a tie
+                // counts as replaced, so a late result never overwrites.
+                ->where('queued_at', '>=', $job->queued_at)
                 ->exists();
     }
 
@@ -198,14 +206,18 @@ class AiJobService
             'risk_rubric_version' => $result['risk_rubric_version'] ?? null,
         ]);
 
-        // AI drafts carry each clause kind once. `other` means the contract
-        // as a whole, so it points at no clause.
-        $clauseIds = $version->clauses()->where('kind', '!=', 'other')->pluck('id', 'kind');
+        // Findings name their clause by ordinal (null = the contract as a
+        // whole). A result from an AI release without ordinals falls back to
+        // matching by kind, where `other` meant the whole contract.
+        $byOrdinal = $version->clauses()->pluck('id', 'ordinal');
+        $byKind = $version->clauses()->where('kind', '!=', 'other')->pluck('id', 'kind');
 
         foreach ($result['findings'] as $finding) {
             $analysis->findings()->create([
                 'tenant_id' => $job->tenant_id,
-                'clause_id' => $clauseIds[$finding['clause_kind']] ?? null,
+                'clause_id' => array_key_exists('ordinal', $finding)
+                    ? ($finding['ordinal'] === null ? null : ($byOrdinal[$finding['ordinal']] ?? null))
+                    : ($byKind[$finding['clause_kind']] ?? null),
                 'clause_kind' => $finding['clause_kind'],
                 'kind' => $finding['kind'],
                 'severity' => $finding['severity'],

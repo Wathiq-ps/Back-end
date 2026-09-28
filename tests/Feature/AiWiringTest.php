@@ -5,6 +5,7 @@ use App\Jobs\CheckAiJobTimeout;
 use App\Jobs\SendAiJob;
 use App\Models\AiJob;
 use App\Models\Contract;
+use App\Models\ContractAnalysis;
 use App\Models\Property;
 use App\Models\PropertyRequest;
 use App\Models\Tenant;
@@ -646,4 +647,68 @@ test('the callback route is not rate-limited', function () {
     $route = app('router')->getRoutes()->match(Request::create('/api/v1/ai/callback', 'POST'));
 
     expect(collect($route->gatherMiddleware())->filter(fn ($m) => str_starts_with($m, 'throttle')))->toBeEmpty();
+});
+
+test('an analysis is sent the version as its clause rows', function () {
+    $contract = draftedContract();
+    $this->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser($this->lawyer))->assertAccepted();
+    $job = $contract->aiJobs()->where('kind', 'analyze_contract')->firstOrFail();
+
+    $clauses = app(AiJobService::class)->wirePayload($job)['payload']['clauses'];
+
+    expect($clauses)->toHaveCount(count(CLAUSE_KINDS))
+        ->and($clauses[0])->toBe(['ordinal' => 1, 'clause_kind' => 'parties', 'content' => 'بند parties']);
+});
+
+test('findings land on the clause their ordinal names', function () {
+    $contract = draftedContract();
+    $this->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser($this->lawyer))->assertAccepted();
+    $job = $contract->aiJobs()->where('kind', 'analyze_contract')->firstOrFail();
+    $job->update(['status' => 'running', 'dispatched_at' => now()]);
+    $other = array_search('other', CLAUSE_KINDS, true) + 1;
+    $result = analysisResult();
+    $finding = $result['findings'][1];
+    $result['findings'] = [
+        [...$finding, 'clause_kind' => 'other', 'ordinal' => $other],   // the closing clause itself
+        [...$finding, 'kind' => 'risk', 'clause_kind' => 'other', 'ordinal' => null], // the whole contract
+    ];
+
+    postCallback(callback($job, 'succeeded', $result))->assertNoContent();
+
+    $clauses = $contract->fresh()->currentVersion->clauses;
+    $stored = $contract->fresh()->latestAnalysis->findings()->get()->keyBy('kind');
+    expect($stored['legal_conflict']->clause_id)->toBe($clauses->firstWhere('ordinal', $other)->id)
+        ->and($stored['risk']->clause_id)->toBeNull();
+});
+
+test('a lawyer version can be analysed, and is locked while it is', function () {
+    $contract = analysedContract();
+    $duration = $contract->currentVersion->clauses->firstWhere('kind', 'duration');
+    $this->postJson("/api/v1/contracts/{$contract->id}/versions", [
+        'clauses' => [['ordinal' => $duration->ordinal, 'body' => 'تبدأ مدة الإجارة في 1/10/2026 وتنتهي في 30/9/2027.']],
+    ], actingAsUser($this->lawyer))->assertCreated();
+    $v2 = $contract->fresh()->current_version_id;
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser($this->lawyer))->assertAccepted();
+    $job = $contract->aiJobs()->where('kind', 'analyze_contract')->where('contract_version_id', $v2)->firstOrFail();
+    expect($job->contract_version_id)->toBe($v2)
+        ->and($contract->fresh()->status)->toBe('pending_lawyer_review');
+
+    // In flight: no second submit, no edit, no approval.
+    $this->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser($this->lawyer))->assertConflict();
+    $this->postJson("/api/v1/contracts/{$contract->id}/approval", [], actingAsUser($this->lawyer))->assertConflict();
+
+    $job->update(['status' => 'running', 'dispatched_at' => now()]);
+    postCallback(callback($job, 'succeeded', analysisResult()))->assertNoContent();
+
+    // By version: both analyses share the test transaction's now().
+    $analysis = ContractAnalysis::where('contract_version_id', $v2)->firstOrFail();
+    expect($contract->fresh()->status)->toBe('pending_lawyer_review')
+        ->and($analysis->findings()->where('resolution', 'open')->count())->toBe(2);
+});
+
+test('a version that has been analysed is not analysed again', function () {
+    $contract = analysedContract();
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser($this->lawyer))->assertConflict();
 });
