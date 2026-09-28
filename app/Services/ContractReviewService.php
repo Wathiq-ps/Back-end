@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\Auth\AuthorizationFailedException;
+use App\Models\AiJob;
 use App\Models\AnalysisFinding;
 use App\Models\Contract;
 use App\Models\ContractVersion;
@@ -181,10 +182,20 @@ class ContractReviewService
         $contract->update(['status' => $to]);
     }
 
-    /** Re-read under a row lock, so two reviews of one contract can't interleave. */
+    /**
+     * Re-read under a row lock, so two reviews of one contract can't
+     * interleave — and refuse while the AI is analysing it: its findings are
+     * about the text as submitted.
+     */
     private function lock(Contract $contract): Contract
     {
-        return Contract::whereKey($contract->id)->lockForUpdate()->with('currentVersion')->firstOrFail();
+        $contract = Contract::whereKey($contract->id)->lockForUpdate()->with('currentVersion')->firstOrFail();
+
+        if ($contract->aiJobs()->where('kind', 'analyze_contract')->whereIn('status', AiJob::IN_FLIGHT)->exists()) {
+            abort(409, 'The contract is being analysed; wait for the result.');
+        }
+
+        return $contract;
     }
 
     private function assertAssignedLawyer(User $user, Contract $contract): void

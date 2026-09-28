@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\Auth\AuthorizationFailedException;
 use App\Models\AiJob;
 use App\Models\Contract;
+use App\Models\ContractAnalysis;
 use App\Models\PropertyRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -59,12 +60,32 @@ class ContractService
     {
         $this->assertAssignedLawyer($lawyer, $contract);
 
-        if ($contract->status !== 'draft' || ! $contract->current_version_id) {
-            abort(409, 'Only a drafted contract can be submitted for analysis.');
-        }
-
         return DB::transaction(function () use ($lawyer, $contract) {
-            $contract->update(['status' => 'under_ai_review']);
+            // Under a row lock, so two submits can't both pass the checks below.
+            $contract = Contract::whereKey($contract->id)->lockForUpdate()->with('currentVersion')->firstOrFail();
+
+            // A lawyer's own version can be analysed too. The status machine
+            // has no way back to under_ai_review from review, so that case
+            // keeps its status and is locked by the in-flight job instead
+            // (ContractReviewService refuses edits while it runs).
+            $lawyerVersion = in_array($contract->status, ['pending_lawyer_review', 'requires_modification'], true);
+
+            if (! $contract->current_version_id || ! ($contract->status === 'draft' || $lawyerVersion)) {
+                abort(409, 'Only a drafted or reviewed contract can be submitted for analysis.');
+            }
+
+            if ($contract->aiJobs()->where('kind', 'analyze_contract')->whereIn('status', AiJob::IN_FLIGHT)->exists()) {
+                abort(409, 'An analysis of this contract is already running.');
+            }
+
+            // The same text is not re-run: its stored report is the answer.
+            if (ContractAnalysis::where('contract_version_id', $contract->current_version_id)->exists()) {
+                abort(409, 'This version has already been analysed.');
+            }
+
+            if (! $lawyerVersion) {
+                $contract->update(['status' => 'under_ai_review']);
+            }
 
             return $this->ai->queue($contract, 'analyze_contract', $lawyer, $contract->currentVersion);
         });

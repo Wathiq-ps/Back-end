@@ -101,6 +101,8 @@ final class WireContract
                 'result.findings.*.suggested_text' => ['nullable', 'string'],
                 'result.findings.*.citations' => ['present', 'array'],
                 'result.findings.*.confidence' => ['nullable', 'numeric', 'between:0,1'],
+                'result.findings.*.ordinal' => ['sometimes', 'nullable', 'integer'],
+                'result.coverage.*.ordinals' => ['sometimes', 'nullable', 'array'],
             ],
             default => [],
         };
