@@ -103,7 +103,10 @@ Route::prefix('v1/contracts')->middleware(['auth.jwt', 'kyc.verified', 'lawyer.a
 
 // Results from the AI service. No JWT — the HMAC signature is the auth
 // (see AiCallbackController).
-Route::post('v1/ai/callback', AiCallbackController::class)->middleware('throttle:120,1');
+// Not rate-limited: every callback comes from the AI's one address, so a
+// per-IP limit only throttles our own results — and the AI treats the 429 as
+// final. The signature already keeps anyone else out.
+Route::post('v1/ai/callback', AiCallbackController::class);
 
 // UC-031/032-style admin review queue for KYC submissions.
 Route::prefix('v1/admin/kyc')->middleware(['auth.jwt', 'admin'])->name('admin.kyc.')->group(function () {
