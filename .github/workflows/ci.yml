@@ -68,3 +68,9 @@ jobs:
 
       - name: Check formatting
         run: vendor/bin/pint --test
+
+      # Warns (never fails) when Wathiq-ps/Ai main's wire contract has moved
+      # past the pinned copy the tests replay — re-sync on purpose, in a PR.
+      - name: AI contract up to date?
+        run: scripts/sync-ai-contract.sh --check
+        continue-on-error: true

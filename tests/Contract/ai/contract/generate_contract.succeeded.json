@@ -1,0 +1,216 @@
+{
+  "request": {
+    "job_id": "00000000-0000-4000-8000-000000000001",
+    "kind": "generate_contract",
+    "jurisdiction_id": "00000000-0000-4000-8000-00000000000a",
+    "payload": {
+      "contract_type": "rent",
+      "language": "ar",
+      "parties": [
+        {
+          "role": "landlord",
+          "name": "أحمد خليل",
+          "nationality": "فلسطيني",
+          "document_type": "national_id",
+          "document_number": "401234567",
+          "address": "رام الله، شارع الإرسال"
+        },
+        {
+          "role": "tenant",
+          "name": "سارة يوسف",
+          "nationality": "فلسطينية",
+          "document_type": "national_id",
+          "document_number": "852345678",
+          "address": "نابلس، رفيديا"
+        }
+      ],
+      "property": {
+        "type": "apartment",
+        "city": "رام الله",
+        "district": "الماصيون",
+        "building_number": "12",
+        "area_sqm": "120",
+        "rooms": 3,
+        "floor_number": 2,
+        "is_furnished": false
+      },
+      "terms": {
+        "price": "450",
+        "currency": "JOD",
+        "price_unit": "per_month",
+        "deposit": "900",
+        "starts_on": "2026-11-01",
+        "ends_on": "2027-10-31"
+      }
+    }
+  },
+  "accepted": {
+    "job_id": "00000000-0000-4000-8000-000000000001",
+    "status": "running",
+    "respond_within_seconds": 107
+  },
+  "callback": {
+    "job_id": "00000000-0000-4000-8000-000000000001",
+    "kind": "generate_contract",
+    "status": "succeeded",
+    "result": {
+      "body": "نص بند أطراف العقد\n\nنص بند محل العقد\n\nنص بند البدل\n\nنص بند طريقة الدفع\n\nنص بند التأمين\n\nنص بند مدة العقد\n\nنص بند التزامات الطرفين\n\nنص بند الخدمات والرسوم\n\nنص بند الصيانة والإصلاحات\n\nنص بند التسليم والاستلام\n\nنص بند المعاينة\n\nنص بند الضمانات\n\nنص بند إنهاء العقد\n\nنص بند تسوية النزاعات\n\nنص بند القانون الواجب التطبيق\n\nنص بند أحكام ختامية",
+      "clauses": [
+        {
+          "clause_kind": "parties",
+          "content": "نص بند أطراف العقد",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ]
+        },
+        {
+          "clause_kind": "subject",
+          "content": "نص بند محل العقد",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ]
+        },
+        {
+          "clause_kind": "price",
+          "content": "نص بند البدل",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ]
+        },
+        {
+          "clause_kind": "payment_terms",
+          "content": "نص بند طريقة الدفع",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ]
+        },
+        {
+          "clause_kind": "deposit",
+          "content": "نص بند التأمين",
+          "citations": []
+        },
+        {
+          "clause_kind": "duration",
+          "content": "نص بند مدة العقد",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ]
+        },
+        {
+          "clause_kind": "obligations",
+          "content": "نص بند التزامات الطرفين",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ]
+        },
+        {
+          "clause_kind": "utilities",
+          "content": "نص بند الخدمات والرسوم",
+          "citations": []
+        },
+        {
+          "clause_kind": "maintenance",
+          "content": "نص بند الصيانة والإصلاحات",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ]
+        },
+        {
+          "clause_kind": "handover",
+          "content": "نص بند التسليم والاستلام",
+          "citations": []
+        },
+        {
+          "clause_kind": "inspection",
+          "content": "نص بند المعاينة",
+          "citations": []
+        },
+        {
+          "clause_kind": "warranties",
+          "content": "نص بند الضمانات",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ]
+        },
+        {
+          "clause_kind": "termination",
+          "content": "نص بند إنهاء العقد",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ]
+        },
+        {
+          "clause_kind": "dispute_resolution",
+          "content": "نص بند تسوية النزاعات",
+          "citations": []
+        },
+        {
+          "clause_kind": "governing_law",
+          "content": "نص بند القانون الواجب التطبيق",
+          "citations": [
+            {
+              "chunk_id": "00000000-0000-4000-8000-0000000000c1",
+              "article_ref": "المادة (4)",
+              "law": "قانون المالكين والمستأجرين رقم (62) لسنة 1953"
+            }
+          ]
+        },
+        {
+          "clause_kind": "other",
+          "content": "نص بند أحكام ختامية",
+          "citations": []
+        }
+      ]
+    },
+    "error": null,
+    "error_code": null,
+    "provenance": {
+      "provider": "deepseek",
+      "model_id": "deepseek-flash",
+      "model_version": "deepseek-flash",
+      "prompt_version": "generate_contract-v6",
+      "kb_version_id": "00000000-0000-4000-8000-00000000000b"
+    },
+    "usage": {
+      "prompt_tokens": 1200,
+      "completion_tokens": 300,
+      "latency_ms": 0
+    }
+  }
+}

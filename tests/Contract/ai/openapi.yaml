@@ -1,0 +1,586 @@
+openapi: 3.1.0
+info:
+  title: Wathiq AI Legal Engine
+  version: "0.1.0"
+  description: >
+    Wire contract between the Laravel back-end and the AI Legal Engine (FastAPI).
+    See AI/WATHIQ_AI_SPRINT_PLAN.md's Phase 0 section for the HMAC callback scheme this implements.
+    POST /v1/jobs carries no auth; it is meant to be reached over the private network only.
+
+servers:
+  - url: http://localhost:8001
+    description: local dev
+
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      security: []
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+
+  /v1/jobs:
+    post:
+      summary: Enqueue an AI job (Laravel → AI service)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobRequest"
+      responses:
+        "202":
+          description: Job accepted, will run async and call back via webhook
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobAccepted"
+        "422":
+          description: Malformed request, or a kind this service has no worker for
+
+  /api/v1/ai/callback:
+    post:
+      summary: >
+        Documents the shape the AI service POSTs to Laravel's inbound webhook
+        (LARAVEL_CALLBACK_URL) when a job finishes. Not served by the AI
+        service itself. Delivery is retried up to 3 times on a network error
+        or 5xx, re-signed each time; a 4xx is final.
+      security:
+        - HmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobCallback"
+      responses:
+        "200":
+          description: Laravel accepted the callback
+        "401":
+          description: Bad or replayed signature
+
+components:
+  securitySchemes:
+    HmacAuth:
+      type: apiKey
+      in: header
+      name: X-Wathiq-Signature
+      description: "t=<unix_ts>,v1=<hex hmac-sha256(secret, ts + '.' + raw_body)>"
+
+  schemas:
+    JobRequest:
+      type: object
+      required: [job_id, kind, jurisdiction_id, payload]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          description: Same id as app.ai_jobs.id — the AI service does not generate this.
+        kind:
+          type: string
+          enum: [generate_contract, analyze_contract, reindex]
+          description: >-
+            Anything else is a 422. The same job_id sent twice gets a 202 both
+            times but runs once (per process).
+        jurisdiction_id:
+          type: string
+          format: uuid
+        payload:
+          oneOf:
+            - $ref: "#/components/schemas/GenerateContractPayload"
+            - $ref: "#/components/schemas/AnalyzeContractPayload"
+            - $ref: "#/components/schemas/ReindexPayload"
+
+    GenerateContractPayload:
+      type: object
+      required: [contract_type, parties, property]
+      properties:
+        contract_type:
+          type: string
+          description: >-
+            Which contract to draft. rent drafts a lease (عقد إيجار); sale
+            drafts a sale agreement (اتفاقية بيع) binding the parties to
+            complete the transfer at the Land Registry, where ownership
+            passes (it does not pass on signing). Any other value is
+            accepted on the wire and answered with error_code
+            unsupported_contract_type, not a 422 — see
+            BACKEND_INTEGRATION.md's Failure modes.
+        parties:
+          type: array
+          description: >-
+            For a rent, `role` is landlord or tenant; for a sale, seller or
+            buyer (drafted as الطرف الأول and الطرف الثاني). Each identity or
+            address field left out becomes a [bracketed blank] the lawyer
+            must fill.
+          items:
+            type: object
+            required: [role, name]
+            properties:
+              role:
+                type: string
+              name:
+                type: string
+              nationality:
+                type: string
+              document_type:
+                type: string
+                example: national_id
+              document_number:
+                type: string
+              address:
+                type: string
+                description: The party's address for service (الموطن المختار).
+        property:
+          type: object
+          description: >-
+            Free-form; passed to the model as given. For a sale, include the
+            Land Registry identifiers if known (e.g. basin_name,
+            basin_number, parcel_number, apartment_number) — each one left
+            out becomes a [bracketed blank].
+        terms:
+          type: object
+          description: >-
+            Optional. Values the draft must use instead of leaving a
+            [bracketed blank]. Pass what you have; omit what you don't.
+            Passed to the drafting prompt as given, so extra keys are used.
+          properties:
+            price:
+              type: string
+              example: "450.00"
+              description: Major units as a string, not minor units.
+            currency:
+              type: string
+              example: JOD
+            price_unit:
+              type: string
+              example: per_month
+              description: Rent only. Omit for a sale — price is the total.
+            starts_on:
+              type: string
+              format: date
+              description: Rent only.
+            ends_on:
+              type: string
+              format: date
+              description: Rent only.
+            deposit:
+              type: string
+              example: "900"
+              description: Rent only. The security deposit, major units, in the rent's currency.
+            payment_timing:
+              type: string
+              example: in advance on the first of each month
+              description: Rent only. When rent falls due; absent, the draft says in advance.
+        language:
+          type: string
+          enum: [ar, en]
+          default: ar
+
+    AnalyzeContractPayload:
+      type: object
+      description: >-
+        Send the contract as `clauses` (preferred) or `content`; at least one.
+        With `clauses`, each clause is judged as the kind it is, findings come
+        back with the `ordinal` of the clause they concern, and coverage lists
+        the `ordinals` of each kind — no mapping by kind needed.
+      properties:
+        content:
+          type: string
+          description: >-
+            The contract body as one text. Derived from `clauses` (joined by
+            blank lines, in ordinal order) when those are sent.
+        clauses:
+          type: array
+          minItems: 1
+          description: The version's clause rows. Ordinals must be unique.
+          items:
+            $ref: "#/components/schemas/AnalyzeClause"
+        contract_version_id:
+          type: string
+          format: uuid
+          description: >-
+            Optional. For Laravel's own bookkeeping — this service never reads
+            it and correlates the callback by job_id, so it is not required.
+        contract_type:
+          type: string
+          description: >-
+            Optional. Scopes law retrieval to this contract's own law plus
+            the general layer ("rent" -> rent+general, "sale" ->
+            sale+ownership+tax+general) and judges it as that type (a sale
+            on its price and registry transfer). Unrecognized falls back to
+            the general layer only; omitted searches every law type.
+        samples:
+          type: integer
+          minimum: 1
+          maximum: 3
+          default: 3
+          description: >-
+            Optional self-consistency vote size. >1 runs that many analyses
+            over the same retrieved excerpts and keeps what they agree on.
+            3 measured ~36s end to end against the 60s budget; send 1 for a
+            faster, noisier report. See BACKEND_INTEGRATION.md's
+            Reproducibility section.
+
+    AnalyzeClause:
+      type: object
+      required: [ordinal, content]
+      properties:
+        ordinal:
+          type: integer
+          description: The clause's position in its version (contract_clauses.ordinal).
+        clause_kind:
+          allOf:
+            - $ref: "#/components/schemas/ClauseKind"
+          nullable: true
+          description: Omit only for a clause of no known kind.
+        content:
+          type: string
+
+    ReindexPayload:
+      type: object
+      description: >-
+        UC-080. Rebuilds this jurisdiction's active kb_version from every
+        document already registered in knowledge.documents. The AI service
+        cannot create or verify sources, so there is nothing else to send.
+      properties:
+        tag:
+          type: string
+          nullable: true
+          description: Optional label for the new kb_version. Defaults to reindex-<UTC timestamp>.
+        notes:
+          type: string
+          nullable: true
+
+    JobCallback:
+      type: object
+      required: [job_id, kind, status, provenance, usage]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [generate_contract, analyze_contract, reindex]
+        status:
+          type: string
+          enum: [succeeded, failed, timed_out]
+        result:
+          oneOf:
+            - $ref: "#/components/schemas/GenerateContractResult"
+            - $ref: "#/components/schemas/AnalyzeContractResult"
+            - $ref: "#/components/schemas/ReindexResult"
+        error:
+          type: string
+          nullable: true
+          description: Set when status != succeeded. For logs, not for users.
+        error_code:
+          type: string
+          nullable: true
+          enum: [invalid_payload, unsupported_contract_type, no_verified_sources,
+                 llm_invalid_output, timeout, no_documents, internal]
+          description: Set when status != succeeded. Stable; store it in ai_jobs.error_code.
+        provenance:
+          $ref: "#/components/schemas/Provenance"
+        usage:
+          $ref: "#/components/schemas/Usage"
+
+    GenerateContractResult:
+      type: object
+      required: [body, clauses]
+      properties:
+        body:
+          type: string
+          description: The clauses' content joined by blank lines, in clause order.
+        clauses:
+          type: array
+          items:
+            $ref: "#/components/schemas/DraftClause"
+
+    DraftClause:
+      type: object
+      required: [clause_kind, content, citations]
+      properties:
+        clause_kind:
+          $ref: "#/components/schemas/ClauseKind"
+        content:
+          type: string
+        citations:
+          type: array
+          description: >-
+            The law this clause rests on (BR-25). Empty only on deposit,
+            utilities, handover, inspection, dispute_resolution and other —
+            the parties' own bargain, which the law may not speak to.
+          items:
+            $ref: "#/components/schemas/Citation"
+
+    AnalyzeContractResult:
+      type: object
+      required: [coverage, findings, risk_score, risk_rubric_version, summary_ar, summary_en, confidence]
+      properties:
+        coverage:
+          type: array
+          description: >
+            The completeness checklist: one entry per clause kind of the
+            contract's type, always all of them, including the clauses that were found fine. This is what makes
+            a report reproducible -- the model cannot silently decline to mention
+            a clause. Every entry whose status is not `present` is ALSO emitted
+            as a missing_clause finding, so a consumer that only reads findings[]
+            loses nothing; read coverage[] when you need "what was checked and
+            passed", which findings[] cannot express. The checklist is the
+            contract type's own list of kinds: 11 for a sale or an untyped
+            contract, 16 for a rent.
+          items:
+            $ref: "#/components/schemas/ClauseCoverage"
+        findings:
+          type: array
+          description: >
+            Completeness findings derived from coverage[] (kind=missing_clause,
+            severity assigned by the service, not the model) followed by the
+            model's judgement findings (legal_conflict, ambiguity, suggestion,
+            risk).
+          items:
+            $ref: "#/components/schemas/Finding"
+        risk_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: >
+            Two halves that cannot drown each other out: completeness, scored as
+            the share of the 11-clause checklist that is absent (weight 1) or
+            incomplete (weight 0.5), worth at most 55; plus the model's
+            judgement findings scored by severity, worth at most 45. Computed by
+            the service, never asked of the model. The band shown to users is
+            Laravel's (contract_analyses.risk_band, generated from this score).
+        risk_rubric_version:
+          type: string
+          example: risk-v2
+          description: >
+            Scores from different rubric versions are NOT comparable. Store it
+            next to the score and re-run rather than comparing across versions.
+        summary_ar:
+          type: string
+        summary_en:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: >
+            Mean confidence over the model's judgement findings only. The
+            checklist findings carry 1.0 by construction and are excluded, so
+            this does not drift to 1.0 on contracts with many missing clauses.
+            A contract with no judgement findings reports 1.0.
+
+    ReindexResult:
+      type: object
+      required: [kb_version_id, documents]
+      properties:
+        kb_version_id:
+          type: string
+          format: uuid
+          description: The new active version. The previous active one is superseded.
+        documents:
+          type: integer
+          description: >-
+            How many documents went into the build, not the chunk count. The
+            chunk count is verified internally before the version is activated.
+
+    ClauseCoverage:
+      type: object
+      required: [clause_kind, status, note, citations, ordinals]
+      properties:
+        clause_kind:
+          $ref: "#/components/schemas/ClauseKind"
+        status:
+          type: string
+          enum: [present, incomplete, absent]
+          description: >
+            present = the clause is there and usable.
+            incomplete = present but unusable as written (an unfilled blank).
+            absent = there is no such clause.
+        note:
+          type: string
+          description: One Arabic sentence, user-facing. Names articles by number.
+        citations:
+          type: array
+          description: >
+            The excerpts the verdict rests on, and empty where the law does not
+            speak to that clause -- a missing clause is measured against this
+            service's checklist, not against a statute that demands it. Never a
+            law the service did not retrieve (BR-25).
+          items:
+            $ref: "#/components/schemas/Citation"
+        ordinals:
+          type: array
+          nullable: true
+          items:
+            type: integer
+          description: >-
+            The ordinals of every sent clause of this kind — empty when the
+            kind is absent. null when the contract was sent as `content`.
+
+    Finding:
+      type: object
+      required: [kind, clause_kind, severity, title_ar, title_en, description, suggested_text, citations, confidence, ordinal]
+      properties:
+        kind:
+          type: string
+          enum: [missing_clause, legal_conflict, ambiguity, suggestion, risk]
+        clause_kind:
+          $ref: "#/components/schemas/ClauseKind"
+          description: >
+            Which clause the finding is about, so a review UI can show it next
+            to that clause. `other` means the contract as a whole. On a
+            missing_clause finding it is the coverage entry it came from.
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        title_ar:
+          type: string
+        title_en:
+          type: string
+        description:
+          type: string
+        suggested_text:
+          type: string
+          nullable: true
+        citations:
+          type: array
+          description: >
+            Always at least one on a judgement finding (BR-25). A
+            missing_clause finding inherits its coverage entry's citations,
+            which may be empty.
+          items:
+            $ref: "#/components/schemas/Citation"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        ordinal:
+          type: integer
+          nullable: true
+          description: >-
+            The clause the finding is about, when the contract was sent as
+            `clauses`. null means the contract as a whole — distinct from a
+            finding on the closing `other` clause, which carries its ordinal —
+            or that the contract was sent as `content`. On a missing_clause
+            finding it is the one clause of that kind, if exactly one exists.
+
+    JobAccepted:
+      type: object
+      required: [job_id, status, respond_within_seconds]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [running]
+        respond_within_seconds:
+          type: integer
+          nullable: true
+          example: 107
+          description: >
+            The latest this service will still be trying to deliver the job's
+            callback: the kind's time budget plus every callback attempt and
+            its backoff. Schedule your no-callback check from this number (plus
+            your own slack) instead of a constant copied from here. null for a
+            kind with no budget (reindex).
+
+    ClauseKind:
+      type: string
+      description: >
+        Which condition a clause is. The kinds a contract carries depend on
+        its type: a sale (and an untyped contract) carries the first 11; a
+        rent also carries deposit, utilities, maintenance, handover and
+        inspection. Declared once, in app/generate_contract.py
+        (ALL_CLAUSE_KINDS); tests/test_wire_contract.py fails if this list
+        drifts from it. Laravel's app.clause_kind must accept every value.
+      enum: [parties, subject, price, payment_terms, deposit, duration, obligations,
+             utilities, maintenance, handover, inspection, warranties, termination,
+             dispute_resolution, governing_law, other]
+
+    Citation:
+      type: object
+      description: >
+        A reference, not a copy. The excerpt's text is knowledge.chunks.content
+        for chunk_id; fetch it when a reader opens the citation.
+      required: [chunk_id, article_ref, law]
+      properties:
+        chunk_id:
+          type: string
+          format: uuid
+        article_ref:
+          type: string
+          nullable: true
+          example: المادة (4)
+        law:
+          type: string
+          description: The statute's title, as knowledge.sources names it.
+          example: قانون المالكين والمستأجرين رقم (62) لسنة 1953
+
+    Provenance:
+      type: object
+      required: [provider, model_id, model_version, prompt_version, kb_version_id]
+      properties:
+        provider:
+          type: string
+          example: deepseek
+        model_id:
+          type: string
+          example: deepseek-flash
+        model_version:
+          type: string
+          description: >-
+            Today the same as model_id (the provider exposes no finer
+            version). ai_jobs refuses a succeeded row without it.
+        prompt_version:
+          type: string
+        kb_version_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null when the job did not succeed.
+
+    Usage:
+      type: object
+      required: [prompt_tokens, completion_tokens, latency_ms]
+      description: >
+        What the job cost. On every callback, failed and timed_out included --
+        a failed job still spent its tokens. Store in ai_jobs.tokens_input,
+        tokens_output and latency_ms.
+      properties:
+        prompt_tokens:
+          type: integer
+          minimum: 0
+          description: >
+            Input tokens summed over every LLM chat call the job made: every
+            analyze_contract sample and JSON-repair retry, every
+            generate_contract attempt. Embedding calls are not counted, so a
+            reindex reports 0. Also 0 when no LLM call was made -- an invalid
+            payload, or the fake provider. On timed_out, a call cut off mid-flight never reports
+            its usage, so the figure is a lower bound.
+        completion_tokens:
+          type: integer
+          minimum: 0
+          description: >
+            Output tokens, summed the same way (reasoning tokens included
+            where the model emits them).
+        latency_ms:
+          type: integer
+          minimum: 0
+          description: >
+            Wall time of the job's work in this service, from when it started
+            running to the first callback attempt (delivery retries are not
+            included). Compare against the 70s job budget (NFR-1.1's
+            60s plus margin).
