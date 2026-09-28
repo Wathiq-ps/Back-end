@@ -70,6 +70,17 @@ class Contract extends Model
         return $this->hasOne(ContractAnalysis::class, 'contract_version_id', 'current_version_id');
     }
 
+    /**
+     * The most recent analysis, whichever version it analysed. Once the
+     * lawyer edits the draft, the current version has no analysis of its own
+     * (a review cannot go back to the AI), but the lawyer still works from
+     * this one — compare its contract_version_id with current_version_id.
+     */
+    public function latestAnalysis()
+    {
+        return $this->hasOne(ContractAnalysis::class)->latest('created_at');
+    }
+
     public function aiJobs()
     {
         return $this->hasMany(AiJob::class);

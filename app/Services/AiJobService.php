@@ -67,12 +67,21 @@ class AiJobService
      */
     public function apply(AiJob $job, array $callback): void
     {
+        // What the job cost. Sent on failures too: a failed job still spent
+        // its tokens. latency_ms stays ours (dispatch to callback), which
+        // covers the queue and the network as well as the AI's own work.
+        $tokens = array_filter([
+            'tokens_input' => $callback['usage']['prompt_tokens'] ?? null,
+            'tokens_output' => $callback['usage']['completion_tokens'] ?? null,
+        ], fn ($value) => $value !== null);
+
         if ($callback['status'] !== 'succeeded') {
             $this->fail(
                 $job,
                 $callback['error_code'] ?? 'unknown',
                 (string) ($callback['error'] ?? ''),
                 $callback['status'] === 'timed_out' ? 'timed_out' : 'failed',
+                $tokens,
             );
 
             return;
@@ -87,6 +96,7 @@ class AiJobService
             'prompt_version' => $provenance['prompt_version'],
             'kb_version_id' => $provenance['kb_version_id'],
             'result' => $callback['result'],
+            ...$tokens,
             'completed_at' => now(),
             'latency_ms' => $job->dispatched_at ? (int) $job->dispatched_at->diffInMilliseconds(now()) : null,
         ]);
@@ -104,9 +114,10 @@ class AiJobService
      * editing. A failed draft leaves it in `draft` with no version, which is
      * what ContractService::retryGeneration() looks for.
      */
-    public function fail(AiJob $job, string $code, string $message, string $status = 'failed'): void
+    public function fail(AiJob $job, string $code, string $message, string $status = 'failed', array $tokens = []): void
     {
         $ended = AiJob::whereKey($job->id)->whereIn('status', AiJob::IN_FLIGHT)->update([
+            ...$tokens,
             'status' => $status,
             'error_code' => Str::limit($code, 64, ''),
             'error_message' => $message,

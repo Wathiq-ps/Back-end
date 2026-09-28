@@ -142,6 +142,7 @@ function callback(AiJob $job, string $status, ?array $result = null, ?string $er
             'prompt_version' => $job->kind.'-v1',
             'kb_version_id' => $status === 'succeeded' ? test()->kbVersionId : null,
         ],
+        'usage' => ['prompt_tokens' => 1200, 'completion_tokens' => 300, 'latency_ms' => 5000],
     ];
 }
 
@@ -197,6 +198,23 @@ function draftedContract(): Contract
     postCallback(callback($contract->aiJobs()->firstOrFail(), 'succeeded', draftResult()))->assertNoContent();
 
     return $contract->fresh();
+}
+
+/** Drafted, submitted, analysed: the contract as the lawyer's review finds it. */
+function analysedContract(): Contract
+{
+    $contract = draftedContract();
+    test()->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser(test()->lawyer))->assertAccepted();
+    $job = $contract->aiJobs()->where('kind', 'analyze_contract')->firstOrFail();
+    $job->update(['status' => 'running', 'dispatched_at' => now()]);
+    postCallback(callback($job, 'succeeded', analysisResult()))->assertNoContent();
+
+    return $contract->fresh();
+}
+
+function statusHistory(Contract $contract, string $to): object
+{
+    return DB::table('contract_status_history')->where('contract_id', $contract->id)->where('to_status', $to)->sole();
 }
 
 test('a lawyer accepting a request creates the contract and queues its draft', function () {
@@ -370,4 +388,121 @@ test('a job with no callback times out, but a finished one is left alone', funct
     postCallback(callback($job, 'succeeded', draftResult()))->assertNoContent();
     (new CheckAiJobTimeout($job->id))->handle(app(AiJobService::class));
     expect($job->fresh()->status)->toBe('succeeded');
+});
+
+test('a callback records the tokens the job spent, success or not', function () {
+    $contract = draftedContract();
+    expect($contract->aiJobs()->firstOrFail()->only('tokens_input', 'tokens_output'))
+        ->toBe(['tokens_input' => 1200, 'tokens_output' => 300]);
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/analysis", [], actingAsUser($this->lawyer))->assertAccepted();
+    $job = $contract->aiJobs()->where('kind', 'analyze_contract')->firstOrFail();
+    $job->update(['status' => 'running']);
+    postCallback(callback($job, 'failed', errorCode: 'llm_invalid_output'))->assertNoContent();
+
+    expect($job->fresh()->tokens_input)->toBe(1200);
+});
+
+test('the lawyer decides every finding before approving', function () {
+    $contract = analysedContract();
+    $findings = $contract->latestAnalysis->findings->keyBy('clause_kind');
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/approval", [], actingAsUser($this->lawyer))
+        ->assertConflict();
+
+    $this->patchJson("/api/v1/contracts/{$contract->id}/findings/{$findings['duration']->id}", ['resolution' => 'accepted'], actingAsUser($this->lawyer))
+        ->assertOk();
+    $this->patchJson("/api/v1/contracts/{$contract->id}/findings/{$findings['termination']->id}", ['resolution' => 'superseded'], actingAsUser($this->lawyer))
+        ->assertUnprocessable();
+    $this->patchJson("/api/v1/contracts/{$contract->id}/findings/{$findings['termination']->id}",
+        ['resolution' => 'rejected', 'note' => 'Article 5 does not apply to a furnished flat.'], actingAsUser($this->lawyer))
+        ->assertOk();
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/approval", [], actingAsUser($this->lawyer))
+        ->assertOk()
+        ->assertJsonPath('data.status', 'approved');
+
+    $contract->refresh();
+    expect($contract->approved_at)->not->toBeNull()
+        ->and($findings['termination']->fresh()->only('resolution', 'resolved_by', 'resolution_note'))->toBe([
+            'resolution' => 'rejected', 'resolved_by' => $this->lawyer->id,
+            'resolution_note' => 'Article 5 does not apply to a furnished flat.',
+        ])
+        ->and(statusHistory($contract, 'approved')->actor_id)->toBe($this->lawyer->id);
+});
+
+test('only the assigned lawyer reviews, and only a contract pending review', function () {
+    $contract = analysedContract();
+    $finding = $contract->latestAnalysis->findings->first();
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/approval", [], actingAsUser($this->owner))->assertForbidden();
+    $this->patchJson("/api/v1/contracts/{$contract->id}/findings/{$finding->id}", ['resolution' => 'accepted'], actingAsUser($this->owner))
+        ->assertForbidden();
+
+    Contract::whereKey($contract->id)->update(['status' => 'cancelled', 'cancellation_reason' => 'Parties withdrew.']);
+    $this->postJson("/api/v1/contracts/{$contract->id}/approval", [], actingAsUser($this->lawyer))->assertConflict();
+});
+
+test('an edit makes a new lawyer version and supersedes the findings still open', function () {
+    $contract = analysedContract();
+    $v1 = $contract->currentVersion;
+    $duration = $v1->clauses->firstWhere('kind', 'duration');
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/versions", [
+        'clauses' => [['ordinal' => $duration->ordinal, 'body' => 'تبدأ مدة الإجارة في 2026-10-01 وتنتهي في 2027-09-30.']],
+        'change_note' => 'Filled in the term.',
+    ], actingAsUser($this->lawyer))
+        ->assertCreated()
+        ->assertJsonPath('data.current_version.version_no', 2)
+        ->assertJsonPath('data.current_version.author_type', 'lawyer')
+        ->assertJsonPath('data.analysis.contract_version_id', $v1->id);
+
+    $v2 = $contract->fresh()->currentVersion;
+    $clauses = $v2->clauses()->orderBy('ordinal')->get();
+    expect($clauses)->toHaveCount(11)
+        ->and($clauses->firstWhere('kind', 'duration')->is_ai_generated)->toBeFalse()
+        ->and($clauses->firstWhere('kind', 'price')->is_ai_generated)->toBeTrue()
+        ->and($v2->body)->toBe($clauses->pluck('body')->implode("\n\n"))
+        ->and($contract->latestAnalysis->findings()->where('resolution', 'superseded')->count())->toBe(2);
+
+    // Nothing left open, so the edited contract can be approved.
+    $this->postJson("/api/v1/contracts/{$contract->id}/approval", [], actingAsUser($this->lawyer))->assertOk();
+});
+
+test('an edit must change something, and must name clauses that exist', function () {
+    $contract = analysedContract();
+    $duration = $contract->currentVersion->clauses->firstWhere('kind', 'duration');
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/versions",
+        ['clauses' => [['ordinal' => $duration->ordinal, 'body' => $duration->body]]], actingAsUser($this->lawyer))
+        ->assertUnprocessable();
+    $this->postJson("/api/v1/contracts/{$contract->id}/versions",
+        ['clauses' => [['ordinal' => 99, 'body' => 'نص']]], actingAsUser($this->lawyer))
+        ->assertUnprocessable();
+
+    expect($contract->versions()->count())->toBe(1);
+});
+
+test('a contract sent back keeps its reason, and a new version resubmits it', function () {
+    $contract = analysedContract();
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/modification-request", [], actingAsUser($this->lawyer))
+        ->assertUnprocessable();
+    $this->postJson("/api/v1/contracts/{$contract->id}/modification-request",
+        ['reason' => 'The owner must confirm the parcel number.'], actingAsUser($this->lawyer))
+        ->assertOk()
+        ->assertJsonPath('data.status', 'requires_modification');
+
+    $this->getJson("/api/v1/contracts/{$contract->id}", actingAsUser($this->owner))
+        ->assertOk()
+        ->assertJsonPath('data.status_reason', 'The owner must confirm the parcel number.');
+    expect(statusHistory($contract, 'requires_modification')->actor_id)->toBe($this->lawyer->id);
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/approval", [], actingAsUser($this->lawyer))->assertConflict();
+
+    $subject = $contract->currentVersion->clauses->firstWhere('kind', 'subject');
+    $this->postJson("/api/v1/contracts/{$contract->id}/versions",
+        ['clauses' => [['ordinal' => $subject->ordinal, 'body' => 'الشقة في القطعة رقم 45 من الحوض رقم 7.']]], actingAsUser($this->lawyer))
+        ->assertCreated()
+        ->assertJsonPath('data.status', 'pending_lawyer_review');
 });
