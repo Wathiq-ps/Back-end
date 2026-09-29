@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\Signature;
 use App\Ai\WireContract;
 use App\Jobs\CheckAiJobTimeout;
 use App\Jobs\SendAiJob;
@@ -269,6 +270,40 @@ test('sending a draft job posts the contract terms and marks the job running', f
         ]);
     expect($job->fresh()->status)->toBe('running')->and($job->fresh()->attempts)->toBe(1);
     Queue::assertPushed(CheckAiJobTimeout::class);
+});
+
+test('a job request is signed over the exact bytes sent, so the AI can tell it came from here', function () {
+    $this->patchJson("/api/v1/lawyer/requests/{$this->request->id}/accept", [], actingAsUser($this->lawyer));
+    $job = AiJob::firstOrFail();
+    Http::fake(['ai.test/*' => Http::response(['job_id' => $job->id, 'status' => 'running'], 202)]);
+
+    (new SendAiJob($job->id))->handle(app(AiJobService::class));
+
+    Http::assertSent(function (HttpRequest $request) {
+        preg_match('/^t=(\d+),v1=([0-9a-f]{64})$/', $request->header('X-Wathiq-Signature')[0] ?? '', $m);
+
+        return $m !== []
+            && abs(time() - (int) $m[1]) <= 5
+            && hash_equals(hash_hmac('sha256', $m[1].'.'.$request->body(), 'test-secret'), $m[2]);
+    });
+});
+
+test('the job signer reproduces the shared test vector', function () {
+    config(['services.ai.webhook_secret' => 'test-secret']);
+    $raw = '{"job_id":"00000000-0000-0000-0000-000000000001","status":"succeeded"}';
+
+    expect(Signature::header($raw, 1760000000))
+        ->toBe('t=1760000000,v1=f864538279116e23481571ff51045794daa4a840a50041743956f19c8a4888eb');
+});
+
+test('with no secret configured a job is never sent unsigned', function () {
+    $this->patchJson("/api/v1/lawyer/requests/{$this->request->id}/accept", [], actingAsUser($this->lawyer));
+    $job = AiJob::firstOrFail();
+    config(['services.ai.webhook_secret' => '']);
+    Http::fake();
+
+    expect(fn () => (new SendAiJob($job->id))->handle(app(AiJobService::class)))->toThrow(RuntimeException::class);
+    Http::assertNothingSent();
 });
 
 test('a job the AI refuses is failed, not retried', function () {

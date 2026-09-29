@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Ai\Signature;
 use App\Models\AiJob;
 use App\Services\AiJobService;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -45,7 +46,13 @@ class SendAiJob implements ShouldQueue
         }
 
         $job = AiJob::findOrFail($this->aiJobId);
-        $response = Http::timeout(10)->post(rtrim((string) config('services.ai.url'), '/').'/v1/jobs', $ai->wirePayload($job));
+        // Encoded once and signed as sent: the AI checks the signature over
+        // these exact bytes, so letting the client re-encode would break it.
+        $raw = json_encode($ai->wirePayload($job), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $response = Http::timeout(10)
+            ->withHeaders(['X-Wathiq-Signature' => Signature::header($raw)])
+            ->withBody($raw, 'application/json')
+            ->post(rtrim((string) config('services.ai.url'), '/').'/v1/jobs');
 
         if ($response->status() === 202) {
             // The AI states how long it may still call back: its job budget
