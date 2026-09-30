@@ -146,7 +146,7 @@ class PropertyController extends Controller
             ->join('property_ratings', 'property_ratings.property_id', '=', 'properties.id')
             ->where('properties.tenant_id', $tenantId)
             ->where('properties.status', 'published')
-            ->with(['media', 'amenities'])
+            ->with($this->homeRelations())
             ->groupBy('properties.id')
             ->orderByDesc('average_rating')
             ->orderByDesc('ratings_count')
@@ -164,7 +164,7 @@ class PropertyController extends Controller
             ->where('tenant_id', $tenantId)
             ->where('status', 'published')
             ->whereNotIn('id', $rated->pluck('id'))
-            ->with(['media', 'amenities'])
+            ->with($this->homeRelations())
             ->orderByDesc('published_at')
             ->limit($remaining)
             ->get();
@@ -190,12 +190,29 @@ class PropertyController extends Controller
             ->where('properties.tenant_id', $tenantId)
             ->where('properties.status', 'published')
             ->where('properties.is_featured', true)
-            ->with(['media', 'amenities'])
+            ->with($this->homeRelations())
             ->groupBy('properties.id')
             ->orderByRaw('avg(property_ratings.score) desc nulls last')
             ->orderByDesc('properties.published_at')
             ->limit(self::FEATURED_LIMIT)
             ->get();
+    }
+
+    /**
+     * Eager loads shared by both home widgets. The owner's KYC flag is
+     * resolved here as a withExists subquery rather than by calling
+     * isKycVerified() per row in the resource, which would be one extra
+     * query per listing.
+     */
+    private function homeRelations(): array
+    {
+        return [
+            'media',
+            'amenities',
+            'owner' => fn ($query) => $query
+                ->select('id', 'name', 'created_at')
+                ->withExists(['identityDocuments as kyc_verified' => fn ($q) => $q->where('status', 'approved')]),
+        ];
     }
 
     public function store(StorePropertyRequest $request): JsonResponse
