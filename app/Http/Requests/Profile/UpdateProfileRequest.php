@@ -22,6 +22,7 @@ class UpdateProfileRequest extends FormRequest
             'name' => ['sometimes', 'string', 'max:191'],
             'nationality' => ['sometimes', 'string', 'max:100'],
             'signature_image' => ['sometimes', 'image', 'max:8192'],
+            'profile_image' => ['sometimes', 'image', 'mimes:jpeg,png,webp', 'max:5120'],
             'document_type' => ['sometimes', 'string', 'max:100'],
             'document_number' => ['sometimes', 'string', 'max:100'],
             'date_of_birth' => ['sometimes', 'date'],

@@ -22,8 +22,9 @@ class ProfileController extends Controller
     {
         $user = $this->profile->update(
             $request->user(),
-            $request->safe()->except('signature_image'),
+            $request->safe()->except(['signature_image', 'profile_image']),
             $request->file('signature_image'),
+            $request->file('profile_image'),
         );
 
         return response()->json([

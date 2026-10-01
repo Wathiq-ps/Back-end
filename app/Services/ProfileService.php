@@ -9,11 +9,14 @@ use Illuminate\Support\Facades\Storage;
 /**
  * The signature image is stored on the same private disk as identity
  * documents — it is evidence that ends up on contracts (app.signatures),
- * so it is never exposed by a public URL.
+ * so it is never exposed by a public URL. The profile image is the
+ * opposite: it is meant to be seen, so it goes on the public disk.
  */
 class ProfileService
 {
     private const DISK = 'local';
+
+    private const PUBLIC_DISK = 'public';
 
     private const WRITABLE = [
         'name', 'nationality', 'document_type', 'document_number', 'date_of_birth', 'email',
@@ -23,8 +26,12 @@ class ProfileService
      * The request field is `phone_number`; the column is `phone` (an E.164
      * app.phone domain). Everything else maps one to one.
      */
-    public function update(User $user, array $data, ?UploadedFile $signature = null): User
-    {
+    public function update(
+        User $user,
+        array $data,
+        ?UploadedFile $signature = null,
+        ?UploadedFile $profileImage = null,
+    ): User {
         $attributes = array_intersect_key($data, array_flip(self::WRITABLE));
 
         if (array_key_exists('phone_number', $data)) {
@@ -45,6 +52,17 @@ class ProfileService
 
             if ($previousPath) {
                 Storage::disk(self::DISK)->delete($previousPath);
+            }
+        }
+
+        if ($profileImage) {
+            $previousPath = $user->profile_image_path;
+
+            $attributes['profile_image_path'] = Storage::disk(self::PUBLIC_DISK)
+                ->putFile("avatars/{$user->id}", $profileImage);
+
+            if ($previousPath) {
+                Storage::disk(self::PUBLIC_DISK)->delete($previousPath);
             }
         }
 

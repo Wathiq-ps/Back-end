@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class UserResource extends JsonResource
 {
@@ -29,6 +30,9 @@ class UserResource extends JsonResource
             // The signature file itself is private; the client only needs to
             // know whether it still has to be uploaded.
             'has_signature' => filled($this->signature_path),
+            'profile_image_url' => $this->profile_image_path
+                ? Storage::disk('public')->url($this->profile_image_path)
+                : null,
             'profile_complete' => $this->hasCompleteProfile(),
             'missing_profile_fields' => $this->missingProfileFields(),
         ];

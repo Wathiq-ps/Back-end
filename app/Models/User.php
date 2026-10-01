@@ -16,7 +16,7 @@ use Illuminate\Notifications\Notifiable;
  */
 #[Fillable([
     'email', 'phone', 'locale', 'name', 'nationality', 'signature_path',
-    'document_type', 'document_number', 'date_of_birth',
+    'document_type', 'document_number', 'date_of_birth', 'profile_image_path',
 ])]
 class User extends Authenticatable
 {
