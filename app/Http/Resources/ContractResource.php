@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\DB;
 
 class ContractResource extends JsonResource
 {
+    private ?object $sentBack = null;
+
     public function toArray(Request $request): array
     {
         return [
@@ -15,10 +17,11 @@ class ContractResource extends JsonResource
             'reference' => $this->reference,
             'type' => $this->type,
             'status' => $this->status,
-            // Why the lawyer sent it back (UC-070) — what the parties need to act on.
-            'status_reason' => $this->when($this->status === 'requires_modification', fn () => DB::table('contract_status_history')
-                ->where('contract_id', $this->id)->where('to_status', 'requires_modification')
-                ->latest('occurred_at')->value('reason')),
+            // Why it was sent back, and by whom: the lawyer (UC-070), for the
+            // parties to act on, or a party rejecting the approved contract,
+            // for the lawyer to.
+            'status_reason' => $this->when($this->status === 'requires_modification', fn () => $this->sentBack()?->reason),
+            'status_reason_by' => $this->when($this->status === 'requires_modification', fn () => $this->roleOf($this->sentBack()?->actor_id)),
             'value' => $this->valueMajor(),
             'value_currency' => $this->value_currency,
             'starts_on' => $this->starts_on?->toDateString(),
@@ -26,6 +29,10 @@ class ContractResource extends JsonResource
             'owner_id' => $this->owner_id,
             'beneficiary_id' => $this->beneficiary_id,
             'lawyer_id' => $this->lawyer_id,
+            // The parties' approvals of the lawyer-approved contract; both set
+            // means it is ready for signature.
+            'owner_approved_at' => $this->owner_approved_at,
+            'beneficiary_approved_at' => $this->beneficiary_approved_at,
             'property' => $this->whenLoaded('property', fn () => [
                 'id' => $this->property?->id,
                 'reference' => $this->property?->reference,
@@ -88,5 +95,13 @@ class ContractResource extends JsonResource
             ] : null),
             'created_at' => $this->created_at,
         ];
+    }
+
+    /** The latest move to requires_modification: its reason, and who made it. */
+    private function sentBack(): ?object
+    {
+        return $this->sentBack ??= DB::table('contract_status_history')
+            ->where('contract_id', $this->id)->where('to_status', 'requires_modification')
+            ->orderByDesc('occurred_at')->orderByDesc('id')->first(['reason', 'actor_id']);
     }
 }

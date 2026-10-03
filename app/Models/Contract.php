@@ -23,7 +23,8 @@ class Contract extends Model
     protected $fillable = [
         'id', 'tenant_id', 'reference', 'request_id', 'property_id', 'owner_id', 'beneficiary_id',
         'lawyer_id', 'type', 'status', 'jurisdiction_id', 'value_amount', 'value_currency',
-        'starts_on', 'ends_on', 'current_version_id', 'created_by',
+        'starts_on', 'ends_on', 'current_version_id', 'created_by', 'owner_approved_at',
+        'beneficiary_approved_at',
     ];
 
     protected function casts(): array
@@ -33,6 +34,8 @@ class Contract extends Model
             'starts_on' => 'date',
             'ends_on' => 'date',
             'approved_at' => 'datetime',
+            'owner_approved_at' => 'datetime',
+            'beneficiary_approved_at' => 'datetime',
             'activated_at' => 'datetime',
             'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
@@ -98,6 +101,18 @@ class Contract extends Model
     public function isParty(User $user): bool
     {
         return in_array($user->id, [$this->owner_id, $this->beneficiary_id, $this->lawyer_id], true);
+    }
+
+    /** 'owner', 'beneficiary' or 'lawyer': the part this user plays in the contract, if any. */
+    public function roleOf(?string $userId): ?string
+    {
+        return match (true) {
+            $userId === null => null,
+            $userId === $this->owner_id => 'owner',
+            $userId === $this->beneficiary_id => 'beneficiary',
+            $userId === $this->lawyer_id => 'lawyer',
+            default => null,
+        };
     }
 
     /**

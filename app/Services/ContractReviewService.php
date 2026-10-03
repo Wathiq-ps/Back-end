@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\DB;
 /**
  * The lawyer's review, after the AI analysis lands (M4): decide each finding,
  * edit clauses into a new version, then approve (UC-027) or send the contract
- * back for modification (UC-070). Only the assigned lawyer acts here.
+ * back for modification (UC-070). Only the assigned lawyer does those. The
+ * owner and the beneficiary then each approve the approved contract, or
+ * reject it with a note that sends it back to the lawyer.
  *
  * Every status change runs in a transaction that sets wathiq.actor_id and
  * wathiq.transition_reason first, so the contract_status_history row the
@@ -151,6 +153,42 @@ class ContractReviewService
         });
     }
 
+    /**
+     * The owner's or beneficiary's approval of the contract the lawyer
+     * approved. With both in, it is ready to be sent for signature (UC-030).
+     */
+    public function approveAsParty(User $party, Contract $contract): Contract
+    {
+        $column = $this->partyApprovalColumn($party, $contract);
+
+        return DB::transaction(function () use ($contract, $column) {
+            $contract = $this->lockForParty($contract, $column);
+
+            $contract->update([$column => now()]);
+
+            return $contract;
+        });
+    }
+
+    /**
+     * A party's rejection, with the note the lawyer revises from. The contract
+     * goes back to requires_modification, and any approval already given
+     * lapses: it was of the text that is about to change.
+     */
+    public function rejectAsParty(User $party, Contract $contract, string $note): Contract
+    {
+        $column = $this->partyApprovalColumn($party, $contract);
+
+        return DB::transaction(function () use ($party, $contract, $column, $note) {
+            $contract = $this->lockForParty($contract, $column);
+
+            $this->transition($party, $contract, 'requires_modification', $note);
+            $contract->update(['owner_approved_at' => null, 'beneficiary_approved_at' => null]);
+
+            return $contract;
+        });
+    }
+
     private function createVersion(User $lawyer, Contract $contract, string $body, string $hash, array $clauses, ?string $changeNote): ContractVersion
     {
         $version = $contract->versions()->create([
@@ -193,6 +231,31 @@ class ContractReviewService
 
         if ($contract->aiJobs()->where('kind', 'analyze_contract')->whereIn('status', AiJob::IN_FLIGHT)->exists()) {
             abort(409, 'The contract is being analysed; wait for the result.');
+        }
+
+        return $contract;
+    }
+
+    /** Where this party's approval is stamped. Only the owner and the beneficiary have one. */
+    private function partyApprovalColumn(User $user, Contract $contract): string
+    {
+        return match ($contract->roleOf($user->id)) {
+            'owner' => 'owner_approved_at',
+            'beneficiary' => 'beneficiary_approved_at',
+            default => throw AuthorizationFailedException::forbidden(),
+        };
+    }
+
+    /** lock(), then: the parties decide on an approved contract, and once each. */
+    private function lockForParty(Contract $contract, string $column): Contract
+    {
+        $contract = $this->lock($contract);
+
+        if ($contract->status !== 'approved') {
+            abort(409, 'The parties review the contract once the lawyer has approved it.');
+        }
+        if ($contract->{$column}) {
+            abort(409, 'You have already approved this contract.');
         }
 
         return $contract;

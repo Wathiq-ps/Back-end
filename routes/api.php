@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\PropertyController as AdminPropertyController;
 use App\Http\Controllers\Ai\AiCallbackController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Contract\ContractController;
+use App\Http\Controllers\Contract\ContractPartyReviewController;
 use App\Http\Controllers\Contract\ContractReviewController;
 use App\Http\Controllers\Kyc\IdentityDocumentController as KycIdentityDocumentController;
 use App\Http\Controllers\Lawyer\LawyerCredentialController;
@@ -99,6 +100,10 @@ Route::prefix('v1/contracts')->middleware(['auth.jwt', 'kyc.verified', 'lawyer.a
     Route::post('/{contract}/versions', [ContractReviewController::class, 'storeVersion'])->whereUuid('contract');
     Route::post('/{contract}/approval', [ContractReviewController::class, 'approve'])->whereUuid('contract');
     Route::post('/{contract}/modification-request', [ContractReviewController::class, 'requestModification'])->whereUuid('contract');
+    // Then the owner's and beneficiary's: approve it, or reject it with a
+    // note that sends it back to the lawyer.
+    Route::post('/{contract}/party-approval', [ContractPartyReviewController::class, 'approve'])->whereUuid('contract');
+    Route::post('/{contract}/party-rejection', [ContractPartyReviewController::class, 'reject'])->whereUuid('contract');
 });
 
 // Results from the AI service. No JWT — the HMAC signature is the auth

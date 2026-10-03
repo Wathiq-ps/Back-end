@@ -53,7 +53,7 @@ beforeEach(function () {
     $this->seed([TenantSeeder::class, LawyerSeeder::class]);
     $this->lawyer = User::whereHas('lawyerCredential', fn ($q) => $q->where('status', 'approved'))->firstOrFail();
     $this->owner = verifiedUser('Owner Name');
-    $requester = verifiedUser('Tenant Name');
+    $this->beneficiary = verifiedUser('Tenant Name');
 
     $this->property = Property::factory()->published()->create([
         'owner_id' => $this->owner->id,
@@ -68,7 +68,7 @@ beforeEach(function () {
         'tenant_id' => $this->property->tenant_id,
         'reference' => 'RQ-'.strtoupper(Str::random(8)),
         'property_id' => $this->property->id,
-        'requester_id' => $requester->id,
+        'requester_id' => $this->beneficiary->id,
         'lawyer_id' => $this->lawyer->id,
         'type' => 'rent',
         'term_start' => '2026-10-01',
@@ -211,6 +211,18 @@ function analysedContract(): Contract
     $job = $contract->aiJobs()->where('kind', 'analyze_contract')->firstOrFail();
     $job->update(['status' => 'running', 'dispatched_at' => now()]);
     postCallback(callback($job, 'succeeded', analysisResult()))->assertNoContent();
+
+    return $contract->fresh();
+}
+
+/** Every finding decided, then approved: the contract as the parties' review finds it. */
+function approvedContract(?Contract $contract = null): Contract
+{
+    $contract ??= analysedContract();
+    foreach ($contract->latestAnalysis->findings as $finding) {
+        test()->patchJson("/api/v1/contracts/{$contract->id}/findings/{$finding->id}", ['resolution' => 'accepted'], actingAsUser(test()->lawyer))->assertOk();
+    }
+    test()->postJson("/api/v1/contracts/{$contract->id}/approval", [], actingAsUser(test()->lawyer))->assertOk();
 
     return $contract->fresh();
 }
@@ -533,7 +545,8 @@ test('a contract sent back keeps its reason, and a new version resubmits it', fu
 
     $this->getJson("/api/v1/contracts/{$contract->id}", actingAsUser($this->owner))
         ->assertOk()
-        ->assertJsonPath('data.status_reason', 'The owner must confirm the parcel number.');
+        ->assertJsonPath('data.status_reason', 'The owner must confirm the parcel number.')
+        ->assertJsonPath('data.status_reason_by', 'lawyer');
     expect(statusHistory($contract, 'requires_modification')->actor_id)->toBe($this->lawyer->id);
 
     $this->postJson("/api/v1/contracts/{$contract->id}/approval", [], actingAsUser($this->lawyer))->assertConflict();
@@ -543,6 +556,64 @@ test('a contract sent back keeps its reason, and a new version resubmits it', fu
         ['clauses' => [['ordinal' => $subject->ordinal, 'body' => 'الشقة في القطعة رقم 45 من الحوض رقم 7.']]], actingAsUser($this->lawyer))
         ->assertCreated()
         ->assertJsonPath('data.status', 'pending_lawyer_review');
+});
+
+test('once the lawyer approves, the owner and the beneficiary each approve the contract', function () {
+    $contract = analysedContract();
+    $approve = fn (User $user) => $this->postJson("/api/v1/contracts/{$contract->id}/party-approval", [], actingAsUser($user));
+
+    $approve($this->owner)->assertConflict();
+
+    approvedContract($contract);
+    $approve($this->lawyer)->assertForbidden();
+
+    $approve($this->owner)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'approved')
+        ->assertJsonPath('data.beneficiary_approved_at', null)
+        ->assertJsonMissingPath('data.analysis');
+    $approve($this->owner)->assertConflict();
+    $this->postJson("/api/v1/contracts/{$contract->id}/party-rejection", ['note' => 'On second thoughts, no.'], actingAsUser($this->owner))
+        ->assertConflict();
+    $approve($this->beneficiary)->assertOk();
+
+    $contract->refresh();
+    expect($contract->status)->toBe('approved')
+        ->and($contract->owner_approved_at)->not->toBeNull()
+        ->and($contract->beneficiary_approved_at)->not->toBeNull();
+});
+
+test('a party who rejects the contract sends it back to the lawyer with a note', function () {
+    $contract = approvedContract();
+    $reject = fn (User $user, array $body) => $this->postJson("/api/v1/contracts/{$contract->id}/party-rejection", $body, actingAsUser($user));
+
+    $this->postJson("/api/v1/contracts/{$contract->id}/party-approval", [], actingAsUser($this->owner))->assertOk();
+    $reject($this->lawyer, ['note' => 'Not mine to reject.'])->assertForbidden();
+    $reject($this->beneficiary, [])->assertUnprocessable();
+    $reject($this->beneficiary, ['note' => 'The deposit must be one month, not two.'])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'requires_modification')
+        ->assertJsonPath('data.status_reason', 'The deposit must be one month, not two.')
+        ->assertJsonPath('data.status_reason_by', 'beneficiary')
+        // The owner approved text that is about to change.
+        ->assertJsonPath('data.owner_approved_at', null);
+
+    $this->getJson("/api/v1/contracts/{$contract->id}", actingAsUser($this->lawyer))
+        ->assertOk()
+        ->assertJsonPath('data.status_reason', 'The deposit must be one month, not two.')
+        ->assertJsonPath('data.status_reason_by', 'beneficiary');
+    expect(statusHistory($contract, 'requires_modification')->actor_id)->toBe($this->beneficiary->id);
+    $this->postJson("/api/v1/contracts/{$contract->id}/party-approval", [], actingAsUser($this->owner))->assertConflict();
+
+    // The lawyer's next version resubmits it; once approved again, both
+    // parties review it afresh.
+    $deposit = $contract->currentVersion->clauses->firstWhere('kind', 'deposit');
+    $this->postJson("/api/v1/contracts/{$contract->id}/versions",
+        ['clauses' => [['ordinal' => $deposit->ordinal, 'body' => 'يدفع المستأجر تأمينًا يعادل أجرة شهر واحد.']]], actingAsUser($this->lawyer))
+        ->assertCreated()
+        ->assertJsonPath('data.status', 'pending_lawyer_review');
+    $this->postJson("/api/v1/contracts/{$contract->id}/approval", [], actingAsUser($this->lawyer))->assertOk();
+    $this->postJson("/api/v1/contracts/{$contract->id}/party-approval", [], actingAsUser($this->owner))->assertOk();
 });
 
 test('a rent draft carrying the lease mechanics is stored clause by clause', function () {
