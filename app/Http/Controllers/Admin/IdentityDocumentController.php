@@ -32,7 +32,7 @@ class IdentityDocumentController extends Controller
             default => $query->where('status', $status),
         };
 
-        $documents = $query->paginate(20);
+        $documents = $query->paginate(5);
 
         return response()->json([
             'data' => IdentityDocumentResource::collection($documents),
