@@ -58,7 +58,7 @@ class PropertyController extends Controller
      */
     private const DOCUMENT_STATUSES = ['pending', 'under_review', 'approved', 'rejected'];
 
-    private const PER_PAGE = 20;
+    private const PER_PAGE = 3;
 
     /**
      * Every listing in the system, newest first. Defaults to
@@ -102,7 +102,7 @@ class PropertyController extends Controller
         }
 
         if ($reference = $request->query('reference')) {
-            $query->where('reference', 'ilike', $reference.'%');
+            $query->where('reference', 'ilike', $reference . '%');
         }
 
         $properties = $query->paginate(self::PER_PAGE);

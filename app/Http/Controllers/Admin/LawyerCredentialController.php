@@ -32,7 +32,7 @@ class LawyerCredentialController extends Controller
             default => $query->where('status', $status),
         };
 
-        $credentials = $query->paginate(20);
+        $credentials = $query->paginate(3);
 
         return response()->json([
             'data' => LawyerCredentialResource::collection($credentials),
