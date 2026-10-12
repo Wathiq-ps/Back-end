@@ -73,6 +73,7 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified', 'lawyer.
     Route::get('/requests/{propertyRequest}/lawyers', [PropertyRequestController::class, 'lawyers'])->whereUuid('propertyRequest');
     Route::patch('/requests/{propertyRequest}/reject', [PropertyRequestController::class, 'reject']);
     Route::patch('/requests/{propertyRequest}/accept', [PropertyRequestController::class, 'accept']);
+    Route::patch('/requests/{propertyRequest}/cancel', [PropertyRequestController::class, 'cancel'])->whereUuid('propertyRequest');
 
     Route::post('/{id}/ratings', [PropertyRatingController::class, 'store']);
 

@@ -34,7 +34,7 @@ class PropertyRequestController extends Controller
 
         // Match the verification rule in PropertyRequestService::accept().
         $lawyers = User::query()
-            ->whereHas('lawyerCredential', fn($query) => $query->whereNotNull('verified_at'))
+            ->whereHas('lawyerCredential', fn ($query) => $query->whereNotNull('verified_at'))
             ->orderBy('name')
             ->orderBy('id')
             ->get(['id', 'name']);
@@ -72,7 +72,7 @@ class PropertyRequestController extends Controller
 
         $query = PropertyRequest::query()
             ->where('tenant_id', $tenantId)
-            ->whereHas('property', fn($q) => $q->where('owner_id', $request->user()->id))
+            ->whereHas('property', fn ($q) => $q->where('owner_id', $request->user()->id))
             ->with(['property', 'requester'])
             ->orderByDesc('created_at');
 
@@ -147,11 +147,18 @@ class PropertyRequestController extends Controller
         ]);
     }
 
-    /**
-     * Owner accepts a pending request by assigning a lawyer to review it.
-     * This does not itself finalize the request — see
-     * PropertyRequestService::accept().
-     */
+    /** The owner or requester cancels before all three contract approvals. */
+    public function cancel(PropertyRequest $propertyRequest, Request $request): JsonResponse
+    {
+        $propertyRequest = $this->requests->cancel($request->user(), $propertyRequest);
+
+        return response()->json([
+            'message' => __('Request cancelled.'),
+            'data' => new PropertyRequestResource($propertyRequest->load('property')),
+        ]);
+    }
+
+    /** Owner assigns a lawyer; this does not yet finalize acceptance. */
     public function accept(PropertyRequest $propertyRequest, AcceptPropertyRequestRequest $request): JsonResponse
     {
         $propertyRequest = $this->requests->accept(
