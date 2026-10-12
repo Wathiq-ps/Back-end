@@ -70,6 +70,7 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified', 'lawyer.
     Route::delete('/{id}', [PropertyController::class, 'destroy']);
 
     Route::get('/incoming-requests', [PropertyRequestController::class, 'incoming']);
+    Route::get('/requests/{propertyRequest}/lawyers', [PropertyRequestController::class, 'lawyers'])->whereUuid('propertyRequest');
     Route::patch('/requests/{propertyRequest}/reject', [PropertyRequestController::class, 'reject']);
     Route::patch('/requests/{propertyRequest}/accept', [PropertyRequestController::class, 'accept']);
 

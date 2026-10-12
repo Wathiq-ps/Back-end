@@ -10,6 +10,7 @@ use App\Http\Resources\IncomingPropertyRequestResource;
 use App\Http\Resources\PropertyRequestResource;
 use App\Models\PropertyRequest;
 use App\Models\Tenant;
+use App\Models\User;
 use App\Services\PropertyRequestService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,22 @@ class PropertyRequestController extends Controller
      * rejected before it reaches the query, or it's a 500, not "no match".
      */
     private const STATUSES = ['pending', 'pending_lawyer_review', 'accepted', 'rejected', 'cancelled', 'closed', 'expired'];
+
+    /** All verified lawyers the owner can select when accepting this request. */
+    public function lawyers(PropertyRequest $propertyRequest, Request $request): JsonResponse
+    {
+        abort_unless($propertyRequest->property?->owner_id === $request->user()->id, 403);
+        abort_unless($propertyRequest->status === 'pending', 409, 'This request has already been responded to.');
+
+        // Match the verification rule in PropertyRequestService::accept().
+        $lawyers = User::query()
+            ->whereHas('lawyerCredential', fn($query) => $query->whereNotNull('verified_at'))
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get(['id', 'name']);
+
+        return response()->json(['data' => $lawyers]);
+    }
 
     public function store(SubmitPropertyRequestRequest $request, string $id): JsonResponse
     {
@@ -55,7 +72,7 @@ class PropertyRequestController extends Controller
 
         $query = PropertyRequest::query()
             ->where('tenant_id', $tenantId)
-            ->whereHas('property', fn ($q) => $q->where('owner_id', $request->user()->id))
+            ->whereHas('property', fn($q) => $q->where('owner_id', $request->user()->id))
             ->with(['property', 'requester'])
             ->orderByDesc('created_at');
 
