@@ -127,7 +127,10 @@ class PropertyController extends Controller
     {
         $documents = $this->documentQuery($request)->paginate(self::PER_PAGE);
 
-        return $this->paginated(OwnershipDocumentResource::collection($documents), $documents);
+        return $this->paginated(OwnershipDocumentResource::collection($documents), $documents, [
+            // Independent of ?status — the dashboard's running tally of approvals.
+            'approved_total' => OwnershipDocument::query()->where('status', 'approved')->count(),
+        ]);
     }
 
     /**
@@ -210,7 +213,10 @@ class PropertyController extends Controller
         return $query;
     }
 
-    private function paginated(AnonymousResourceCollection $data, LengthAwarePaginator $page): JsonResponse
+    /**
+     * @param  array<string, mixed>  $extraMeta
+     */
+    private function paginated(AnonymousResourceCollection $data, LengthAwarePaginator $page, array $extraMeta = []): JsonResponse
     {
         return response()->json([
             'data' => $data,
@@ -218,6 +224,7 @@ class PropertyController extends Controller
                 'current_page' => $page->currentPage(),
                 'last_page' => $page->lastPage(),
                 'total' => $page->total(),
+                ...$extraMeta,
             ],
         ]);
     }

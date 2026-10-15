@@ -40,6 +40,8 @@ class IdentityDocumentController extends Controller
                 'current_page' => $documents->currentPage(),
                 'last_page' => $documents->lastPage(),
                 'total' => $documents->total(),
+                // Independent of ?status — the dashboard's running tally of approvals.
+                'approved_total' => IdentityDocument::query()->where('status', 'approved')->count(),
             ],
         ]);
     }

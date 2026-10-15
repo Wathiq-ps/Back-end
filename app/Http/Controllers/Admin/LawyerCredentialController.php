@@ -40,6 +40,8 @@ class LawyerCredentialController extends Controller
                 'current_page' => $credentials->currentPage(),
                 'last_page' => $credentials->lastPage(),
                 'total' => $credentials->total(),
+                // Independent of ?status — the dashboard's running tally of approvals.
+                'approved_total' => LawyerCredential::query()->where('status', 'approved')->count(),
             ],
         ]);
     }
