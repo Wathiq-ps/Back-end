@@ -26,6 +26,8 @@ class OwnershipDocumentResource extends JsonResource
                 'status' => $this->property?->status,
                 'city' => $this->property?->city,
                 'district' => $this->property?->district,
+                'area_sqm' => $this->property?->area_sqm,
+                'type' => $this->property?->type,
                 'owner' => [
                     'id' => $this->property?->owner?->id,
                     'name' => $this->property?->owner?->name,
