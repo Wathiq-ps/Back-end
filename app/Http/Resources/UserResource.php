@@ -35,6 +35,27 @@ class UserResource extends JsonResource
                 : null,
             'profile_complete' => $this->hasCompleteProfile(),
             'missing_profile_fields' => $this->missingProfileFields(),
+            // UC-040 step 2, where the client sends the user once the profile
+            // is complete: not_submitted, pending, under_review, approved or
+            // rejected. Only approved passes kyc.verified.
+            ...$this->identity(),
+        ];
+    }
+
+    /**
+     * An approved document outranks a newer one, so identity_status always
+     * agrees with isKycVerified(); otherwise the latest submission decides.
+     */
+    private function identity(): array
+    {
+        $document = $this->identityDocuments()
+            ->orderByRaw("status = 'approved' desc")
+            ->orderByDesc('created_at')
+            ->first(['status', 'rejection_reason']);
+
+        return [
+            'identity_status' => $document?->status ?? 'not_submitted',
+            'identity_rejection_reason' => $document?->status === 'rejected' ? $document->rejection_reason : null,
         ];
     }
 

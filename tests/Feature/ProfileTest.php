@@ -7,6 +7,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 // A real 1x1 PNG, so the `image` rule's mime sniffing passes without GD.
 const PROFILE_TEST_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -46,6 +47,13 @@ beforeEach(function () {
         $table->string('role_id');
         $table->string('status');
     });
+    Schema::create('identity_documents', function (Blueprint $table) {
+        $table->string('id')->primary();
+        $table->string('user_id');
+        $table->string('status');
+        $table->text('rejection_reason')->nullable();
+        $table->timestamps();
+    });
 
     DB::table('users')->insert(['id' => 'user-1', 'email' => 'owner@example.test']);
     $this->user = User::find('user-1');
@@ -62,6 +70,46 @@ function profileImageUpload(string $name = 'avatar.png'): UploadedFile
 {
     return UploadedFile::fake()->createWithContent($name, base64_decode(PROFILE_TEST_PNG));
 }
+
+function identityDocument(string $status, string $createdAt, ?string $reason = null): void
+{
+    DB::table('identity_documents')->insert([
+        'id' => (string) Str::uuid(), 'user_id' => 'user-1', 'status' => $status,
+        'rejection_reason' => $reason, 'created_at' => $createdAt, 'updated_at' => $createdAt,
+    ]);
+}
+
+test('the profile says identity was never submitted', function () {
+    $this->withToken($this->token)->getJson('/api/v1/profile')
+        ->assertOk()
+        ->assertJsonPath('user.identity_status', 'not_submitted')
+        ->assertJsonPath('user.identity_rejection_reason', null);
+});
+
+test('the profile shows the latest identity submission', function () {
+    identityDocument('rejected', '2026-10-01 10:00:00', 'Blurry photo.');
+    identityDocument('pending', '2026-10-02 10:00:00');
+
+    $this->withToken($this->token)->getJson('/api/v1/profile')
+        ->assertJsonPath('user.identity_status', 'pending')
+        ->assertJsonPath('user.identity_rejection_reason', null);
+});
+
+test('a rejected identity carries the reason', function () {
+    identityDocument('rejected', '2026-10-01 10:00:00', 'Blurry photo.');
+
+    $this->withToken($this->token)->getJson('/api/v1/profile')
+        ->assertJsonPath('user.identity_status', 'rejected')
+        ->assertJsonPath('user.identity_rejection_reason', 'Blurry photo.');
+});
+
+test('an approved identity wins over a newer document', function () {
+    identityDocument('approved', '2026-10-01 10:00:00');
+    identityDocument('rejected', '2026-10-02 10:00:00', 'Re-reviewed.');
+
+    $this->withToken($this->token)->getJson('/api/v1/profile')
+        ->assertJsonPath('user.identity_status', 'approved');
+});
 
 test('a user uploads a profile image and gets its public url back', function () {
     $response = $this->withToken($this->token)
