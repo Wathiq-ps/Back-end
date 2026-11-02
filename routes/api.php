@@ -32,6 +32,8 @@ Route::prefix('v1/auth')->group(function () {
 Route::prefix('v1/profile')->middleware('auth.jwt')->group(function () {
     Route::get('/', [ProfileController::class, 'show']);
     Route::patch('/', [ProfileController::class, 'update']);
+    // POST, not PATCH: PHP only parses multipart file uploads on POST.
+    Route::post('image', [ProfileController::class, 'updateImage']);
 });
 
 // UC-040 step 2: the authenticated user submits their own documents.

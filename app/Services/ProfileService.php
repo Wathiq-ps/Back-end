@@ -56,14 +56,7 @@ class ProfileService
         }
 
         if ($profileImage) {
-            $previousPath = $user->profile_image_path;
-
-            $attributes['profile_image_path'] = Storage::disk(self::PUBLIC_DISK)
-                ->putFile("avatars/{$user->id}", $profileImage);
-
-            if ($previousPath) {
-                Storage::disk(self::PUBLIC_DISK)->delete($previousPath);
-            }
+            $attributes['profile_image_path'] = $this->replaceProfileImage($user, $profileImage);
         }
 
         // forceFill: the whitelist above is what guards this, and
@@ -73,5 +66,32 @@ class ProfileService
         }
 
         return $user;
+    }
+
+    /**
+     * The dedicated avatar endpoint. Same storage as update() — it exists
+     * because PHP only parses multipart bodies on POST, so a file sent with
+     * PATCH /v1/profile never arrives unless the client spoofs _method.
+     */
+    public function updateProfileImage(User $user, UploadedFile $profileImage): User
+    {
+        $user->forceFill([
+            'profile_image_path' => $this->replaceProfileImage($user, $profileImage),
+        ])->save();
+
+        return $user;
+    }
+
+    private function replaceProfileImage(User $user, UploadedFile $profileImage): string
+    {
+        $previousPath = $user->profile_image_path;
+
+        $path = Storage::disk(self::PUBLIC_DISK)->putFile("avatars/{$user->id}", $profileImage);
+
+        if ($previousPath) {
+            Storage::disk(self::PUBLIC_DISK)->delete($previousPath);
+        }
+
+        return $path;
     }
 }

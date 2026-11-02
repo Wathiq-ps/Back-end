@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Profile;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Profile\UpdateProfileImageRequest;
 use App\Http\Requests\Profile\UpdateProfileRequest;
 use App\Http\Resources\UserResource;
 use App\Services\ProfileService;
@@ -29,6 +30,16 @@ class ProfileController extends Controller
 
         return response()->json([
             'message' => __('Your profile was updated.'),
+            'user' => new UserResource($user),
+        ]);
+    }
+
+    public function updateImage(UpdateProfileImageRequest $request): JsonResponse
+    {
+        $user = $this->profile->updateProfileImage($request->user(), $request->file('profile_image'));
+
+        return response()->json([
+            'message' => __('Your profile image was updated.'),
             'user' => new UserResource($user),
         ]);
     }
