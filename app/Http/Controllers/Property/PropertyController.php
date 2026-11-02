@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Property\StorePropertyRequest;
 use App\Http\Requests\Property\UpdatePropertyRequest;
 use App\Http\Resources\FeaturedPropertyResource;
+use App\Http\Resources\PropertyDetailResource;
 use App\Http\Resources\PropertyResource;
 use App\Http\Resources\PropertySearchResource;
 use App\Http\Resources\TopRatedPropertyResource;
@@ -71,6 +72,21 @@ class PropertyController extends Controller
     }
 
     /**
+     * One of the authenticated owner's own listings, whatever its status —
+     * the detail behind index(). Someone else's listing is a 404, like an
+     * unknown id, so a draft's id doesn't confirm that it exists.
+     */
+    public function showMine(Request $request, string $id): JsonResponse
+    {
+        $property = Property::query()
+            ->where('owner_id', $request->user()->id)
+            ->with(['media', 'ownershipDocuments', 'amenities'])
+            ->findOrFail($id);
+
+        return response()->json(['data' => new PropertyResource($property)]);
+    }
+
+    /**
      * Public home-page search — no auth required. Only published listings
      * are visible here; an owner's own draft/pending/rejected listings only
      * show up in index() ("My properties"). Mirrors the properties_browse_idx
@@ -126,6 +142,27 @@ class PropertyController extends Controller
             'top_rated' => TopRatedPropertyResource::collection($this->topRatedProperties($tenantId)),
             'featured' => FeaturedPropertyResource::collection($this->featuredProperties($tenantId)),
         ]);
+    }
+
+    /**
+     * Public property page — no auth required, published listings only, the
+     * same visibility as search(). Anything else is a 404, not a 403, so a
+     * draft's id doesn't confirm that it exists.
+     */
+    public function show(string $id): JsonResponse
+    {
+        $tenantId = Tenant::where('slug', 'default')->value('id');
+        abort_if(! $tenantId, 500, 'Default tenant not configured.');
+
+        $property = Property::query()
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'published')
+            ->withAvg('ratings as average_rating', 'score')
+            ->withCount('ratings')
+            ->with($this->homeRelations())
+            ->findOrFail($id);
+
+        return response()->json(['data' => new PropertyDetailResource($property)]);
     }
 
     /**

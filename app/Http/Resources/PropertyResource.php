@@ -28,6 +28,8 @@ class PropertyResource extends JsonResource
             'district' => $this->district,
             'building_number' => $this->building_number,
             'address_line' => $this->address_line,
+            'latitude' => $this->latitude,
+            'longitude' => $this->longitude,
 
             'area_sqm' => (float) $this->area_sqm,
             'price' => $this->resolvePriceMajor(),
@@ -45,12 +47,15 @@ class PropertyResource extends JsonResource
                 'id' => $media->id,
                 'is_cover' => $media->is_cover,
                 'sort_order' => $media->sort_order,
+                'url' => $media->url(),
             ])->values(),
 
             'ownership_documents' => $this->ownershipDocuments->map(fn ($document) => [
                 'id' => $document->id,
                 'type' => $document->type,
                 'status' => $document->status,
+                // Why the admin refused it, so the owner can fix a rejected listing.
+                'rejection_reason' => $document->rejection_reason,
             ])->values(),
 
             'created_at' => $this->created_at,

@@ -57,6 +57,10 @@ Route::get('v1/properties/search', [PropertyController::class, 'search']);
 
 Route::get('v1/properties/home', [PropertyController::class, 'home']);
 
+// whereUuid keeps this from swallowing the literal GET paths in the group
+// below (/my-properties, /my-requests, /incoming-requests).
+Route::get('v1/properties/{id}', [PropertyController::class, 'show'])->whereUuid('id');
+
 // FR-3.x: an owner submits a listing, which starts under review.
 // lawyer.approved is a no-op for ordinary users and blocks lawyer-type
 // accounts whose licence an admin hasn't approved yet — it belongs on every
@@ -65,6 +69,7 @@ Route::prefix('v1/properties')->middleware(['auth.jwt', 'kyc.verified', 'lawyer.
 
     // Owner endpoints
     Route::get('/my-properties', [PropertyController::class, 'index']);
+    Route::get('/my-properties/{id}', [PropertyController::class, 'showMine'])->whereUuid('id');
     Route::post('/', [PropertyController::class, 'store']);
     Route::patch('/{id}', [PropertyController::class, 'update']);
     Route::patch('/{id}/publish', [PropertyController::class, 'publish']);

@@ -58,6 +58,7 @@ class PropertyResource extends JsonResource
                 'id' => $media->id,
                 'is_cover' => $media->is_cover,
                 'sort_order' => $media->sort_order,
+                'url' => $media->url(),
             ])->values()),
 
             // The review payload. Deliberately the same shape the queue in

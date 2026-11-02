@@ -45,6 +45,7 @@ class PropertySearchResource extends JsonResource
                 'id' => $media->id,
                 'is_cover' => $media->is_cover,
                 'sort_order' => $media->sort_order,
+                'url' => $media->url(),
             ])->values(),
         ];
     }
