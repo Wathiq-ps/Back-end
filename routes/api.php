@@ -11,6 +11,7 @@ use App\Http\Controllers\Contract\ContractReviewController;
 use App\Http\Controllers\Kyc\IdentityDocumentController as KycIdentityDocumentController;
 use App\Http\Controllers\Lawyer\LawyerCredentialController;
 use App\Http\Controllers\Lawyer\PropertyRequestController as LawyerPropertyRequestController;
+use App\Http\Controllers\Location\LocationController;
 use App\Http\Controllers\Profile\ProfileController;
 use App\Http\Controllers\Property\PropertyController;
 use App\Http\Controllers\Property\PropertyRatingController;
@@ -50,6 +51,17 @@ Route::prefix('v1/kyc')->middleware('auth.jwt')->group(function () {
 Route::prefix('v1/lawyer')->middleware('auth.jwt')->group(function () {
     Route::post('credentials', [LawyerCredentialController::class, 'store'])->middleware('kyc.verified');
     Route::get('credentials/status', [LawyerCredentialController::class, 'status']);
+});
+
+// The country → city → area → street picker (docs/locations.md). Public: the
+// lists hold no user data. The limit is per IP and leaves room for type-ahead
+// search firing a request every few keystrokes.
+Route::prefix('v1/locations')->middleware('throttle:120,1')->group(function () {
+    Route::get('countries', [LocationController::class, 'countries']);
+    Route::get('cities', [LocationController::class, 'cities']);
+    Route::get('areas', [LocationController::class, 'areas']);
+    Route::get('streets', [LocationController::class, 'streets']);
+    Route::get('search', [LocationController::class, 'search']);
 });
 
 // User endpoints

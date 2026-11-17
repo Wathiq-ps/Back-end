@@ -68,6 +68,10 @@ This repository is the Back-end only. The AI service is a separate project (`Wat
 - Lawyers can submit a contract for analysis, resolve findings, add contract versions, approve it or request modification.
 - The owner and beneficiary approve the contract, or reject it with a note that returns it to the lawyer.
 
+### Locations
+- A country → city → area → street picker, with Arabic and English search, alphabetical sorting in the requested language, and pagination at every level, plus one global search across levels.
+- Import commands load the data from GeoNames (countries, cities) and OpenStreetMap (areas, streets). No geographical data ships with the code. Details, attribution and coverage limits are in [docs/locations.md](docs/locations.md).
+
 ### Operations tooling
 - Artisan commands for issuing tokens, granting admin, verifying a user's KYC and verifying knowledge sources (see [Usage](#usage)).
 
@@ -140,7 +144,7 @@ flowchart LR
 │   ├── factories/
 │   └── seeders/               # Roles, tenant, lawyer and reference data
 ├── docker/postgres/           # Postgres 18 + pgvector image
-├── docs/                      # property-request-lifecycle.md
+├── docs/                      # property-request-lifecycle.md, locations.md
 ├── routes/api.php             # All API routes (served under /api)
 ├── scripts/                   # sync-ai-contract.sh
 ├── tests/                     # Pest tests and the pinned AI contract
@@ -248,6 +252,7 @@ Values come from `.env.example`; real credentials must never be committed (`.env
 | `FILESYSTEM_DISK` | Default filesystem disk (`local`) |
 | `AI_SERVICE_URL` | Base URL of the AI service (`http://localhost:8001` in the example) |
 | `AI_WEBHOOK_SECRET` | Signs jobs sent to the AI service and verifies its callbacks. Must equal the AI service's `AI_WEBHOOK_SECRET` |
+| `LOCATIONS_*` | Optional location cache and import settings, all with defaults (see [docs/locations.md](docs/locations.md#configuration)) |
 
 Example `.env` fragment (placeholders only):
 
@@ -364,6 +369,18 @@ The `user` object also carries profile and identity fields (see `UserResource`);
 | DELETE | `/api/v1/properties/{id}` | `kyc+lawyer` | Delete |
 | POST | `/api/v1/properties/{id}/ratings` | `kyc+lawyer` | Rate a property |
 
+### Locations
+
+Public, limited to 120 requests per minute per IP. Parameters, responses and errors are in [docs/locations.md](docs/locations.md#api).
+
+| Method | Endpoint | Access | Description |
+| --- | --- | --- | --- |
+| GET | `/api/v1/locations/countries` | Public | Countries. Query: `search`, `lang`, `sort`, `per_page`, `page` |
+| GET | `/api/v1/locations/cities` | Public | Cities of a country. Requires `country_id` |
+| GET | `/api/v1/locations/areas` | Public | Areas of a city. Requires `city_id` |
+| GET | `/api/v1/locations/streets` | Public | Streets of an area. Requires `area_id` |
+| GET | `/api/v1/locations/search` | Public | Search across levels, grouped by level with parents. Requires `search` |
+
 ### Property requests
 
 All routes below require `kyc+lawyer`.
@@ -447,6 +464,10 @@ A typical end-to-end flow, from the client's point of view:
 | `php artisan user:token {email} [--create]` | Issue an access and refresh token pair, bypassing OTP (development) |
 | `php artisan user:verify-kyc {email} [--reviewer=] [--type=]` | Mark a user KYC-verified by approving their identity document |
 | `php artisan knowledge:verify-sources [--jurisdiction=PS] [--admin=] [--force]` | Mark a jurisdiction's knowledge sources as verified |
+| `php artisan locations:import-countries [--file=]` | Import countries from GeoNames; existing names are kept |
+| `php artisan locations:import-cities {CC} [--min-population=] [--feature-codes=] [--file=] [--alternate-names-file=]` | Import one country's cities from GeoNames |
+| `php artisan locations:import-areas {CC} [--city=] [--max-distance=]` | Import districts and neighbourhoods from OpenStreetMap |
+| `php artisan locations:import-streets {city-id} [--radius=] [--max-distance=]` | Import one city's streets from OpenStreetMap |
 
 ## Testing and Code Style
 
